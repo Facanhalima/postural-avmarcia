@@ -579,7 +579,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
     setCurrentAnalysis(newAnalysis);
 
     // Salvar imagem atual
-    const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
+    const imageBase64 = canvas.toDataURL('image/jpeg', 0.92);
     setCurrentImageBase64(imageBase64);
 
     // Desenhar esqueleto

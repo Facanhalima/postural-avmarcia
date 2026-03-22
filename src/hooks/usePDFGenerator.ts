@@ -28,6 +28,40 @@ export const usePDFGenerator = () => {
       const lower = imageData.toLowerCase();
       return lower.includes('image/png') ? 'PNG' : 'JPEG';
     };
+
+    const renderPhoto = (imageBase64: string, x: number, y: number, frameWidth: number, frameHeight: number): boolean => {
+      try {
+        const imageData = normalizeImageData(imageBase64);
+        const imageFormat = resolveImageFormat(imageData);
+        const properties = doc.getImageProperties(imageData);
+        const sourceWidth = properties.width || 4;
+        const sourceHeight = properties.height || 3;
+        const sourceRatio = sourceWidth / sourceHeight;
+        const frameRatio = frameWidth / frameHeight;
+
+        let drawWidth = frameWidth;
+        let drawHeight = frameHeight;
+
+        if (sourceRatio > frameRatio) {
+          drawHeight = frameWidth / sourceRatio;
+        } else {
+          drawWidth = frameHeight * sourceRatio;
+        }
+
+        const drawX = x + (frameWidth - drawWidth) / 2;
+        const drawY = y + (frameHeight - drawHeight) / 2;
+
+        doc.setFillColor(248, 248, 248);
+        doc.roundedRect(x, y, frameWidth, frameHeight, 2, 2, 'FD');
+        doc.addImage(imageData, imageFormat, drawX, drawY, drawWidth, drawHeight, undefined, 'MEDIUM');
+        doc.setDrawColor(180, 180, 180);
+        doc.roundedRect(x, y, frameWidth, frameHeight, 2, 2, 'S');
+        return true;
+      } catch (error) {
+        console.error('Erro ao adicionar imagem no PDF:', error);
+        return false;
+      }
+    };
     
     // Cabeçalho
     doc.setFillColor(31, 58, 147);
@@ -140,7 +174,9 @@ export const usePDFGenerator = () => {
 
     sessionData.captures.forEach((capture) => {
       const hasImage = Boolean(capture.imagemBase64);
-      const imageBlockHeight = hasImage ? 70 : 0;
+      const photoWidth = Math.min(contentWidth - 20, 120);
+      const photoHeight = 80;
+      const imageBlockHeight = hasImage ? photoHeight + 10 : 0;
       ensureSpace(38 + imageBlockHeight);
 
       doc.setFont('helvetica', 'bold');
@@ -159,26 +195,18 @@ export const usePDFGenerator = () => {
       });
 
       if (hasImage) {
-        ensureSpace(72);
-        const imageData = normalizeImageData(capture.imagemBase64);
-        const imageFormat = resolveImageFormat(imageData);
-        const imageWidth = 80;
-        const imageHeight = 60;
-
-        doc.setDrawColor(200, 200, 200);
-        doc.roundedRect(25, currentY + 2, imageWidth + 4, imageHeight + 4, 2, 2, 'S');
-
-        try {
-          doc.addImage(imageData, imageFormat, 27, currentY + 4, imageWidth, imageHeight, undefined, 'FAST');
-          currentY += imageHeight + 10;
-        } catch (error) {
+        ensureSpace(photoHeight + 12);
+        const photoX = 25;
+        const rendered = renderPhoto(capture.imagemBase64, photoX, currentY + 2, photoWidth, photoHeight);
+        if (rendered) {
+          currentY += photoHeight + 10;
+        } else {
           doc.setFont('helvetica', 'italic');
           doc.setFontSize(10);
-          doc.text('Não foi possível renderizar a imagem desta posição.', 27, currentY + 10);
+          doc.text('Não foi possível renderizar a imagem desta posição.', photoX + 2, currentY + 10);
           doc.setFontSize(12);
           doc.setFont('helvetica', 'normal');
           currentY += 16;
-          console.error('Erro ao adicionar imagem no PDF:', error);
         }
       }
       
@@ -196,21 +224,31 @@ export const usePDFGenerator = () => {
       sessionData.captures.forEach((capture, index) => {
         const label = `${index + 1}. ${positionLabels[capture.position]}`;
         const hasImage = Boolean(capture.imagemBase64);
-        const imageHeight = 95;
+        const photoWidth = Math.min(contentWidth - 20, 130);
+        const photoHeight = 90;
+        const photoX = 20 + (contentWidth - photoWidth) / 2;
+        const captionYGap = 8;
 
-        ensureSpace(hasImage ? 110 : 15, 20);
+        ensureSpace(hasImage ? photoHeight + 22 : 15, 20);
         doc.setFont('helvetica', 'bold');
         doc.text(label, 20, currentY);
         currentY += 5;
 
         if (hasImage) {
-          const imageData = capture.imagemBase64;
-          const imageFormat = imageData.includes('image/png') ? 'PNG' : 'JPEG';
-
-          doc.setDrawColor(180, 180, 180);
-          doc.roundedRect(20, currentY, contentWidth, imageHeight, 2, 2, 'S');
-          doc.addImage(imageData, imageFormat, 22, currentY + 2, contentWidth - 4, imageHeight - 4, undefined, 'FAST');
-          currentY += imageHeight + 8;
+          const rendered = renderPhoto(capture.imagemBase64, photoX, currentY + 2, photoWidth, photoHeight);
+          if (rendered) {
+            const timestamp = new Date(capture.timestamp).toLocaleString('pt-BR');
+            doc.setFontSize(10);
+            doc.setTextColor(80, 80, 80);
+            doc.text(`Registro: ${timestamp}`, photoX, currentY + photoHeight + captionYGap);
+            doc.setFontSize(12);
+            doc.setTextColor(0, 0, 0);
+            currentY += photoHeight + 14;
+          } else {
+            doc.setFont('helvetica', 'normal');
+            doc.text('Imagem não disponível para esta captura.', 25, currentY + 4);
+            currentY += 12;
+          }
         } else {
           doc.setFont('helvetica', 'normal');
           doc.text('Imagem não disponível para esta captura.', 25, currentY + 4);
