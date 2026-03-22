@@ -1,8 +1,40 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import * as Pose from '@mediapipe/pose';
 import { Camera } from '@mediapipe/camera_utils';
 import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 import type { PostureAnalysis, Landmark, AnatomicalPosition } from '../types';
+
+type PoseInstance = {
+  initialize: () => Promise<void>;
+  setOptions: (options: {
+    modelComplexity: number;
+    smoothLandmarks: boolean;
+    minDetectionConfidence: number;
+    minTrackingConfidence: number;
+  }) => void;
+  onResults: (callback: (results: any) => void) => void;
+  send: (input: { image: HTMLVideoElement }) => Promise<void>;
+};
+
+type PoseConstructor = new (config: { locateFile: (file: string) => string }) => PoseInstance;
+
+const resolvePoseModule = async (): Promise<{ PoseCtor: PoseConstructor; poseConnections: unknown }> => {
+  const moduleExports = await import('@mediapipe/pose');
+  const candidate = moduleExports as Record<string, any>;
+
+  const PoseCtor: PoseConstructor | undefined =
+    candidate.Pose ?? candidate.default?.Pose ?? candidate.default;
+
+  const poseConnections =
+    candidate.POSE_CONNECTIONS ??
+    candidate.default?.POSE_CONNECTIONS ??
+    [];
+
+  if (typeof PoseCtor !== 'function') {
+    throw new Error('Construtor Pose não encontrado no módulo @mediapipe/pose.');
+  }
+
+  return { PoseCtor, poseConnections };
+};
 
 export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -24,6 +56,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [permissionError, setPermissionError] = useState<string>('');
   const [currentImageBase64, setCurrentImageBase64] = useState<string>('');
+  const poseConnectionsRef = useRef<unknown>([]);
 
   // Função para calcular ângulos
   const calcAngle = (p1: Landmark, p2: Landmark, p3: Landmark): number => {
@@ -299,7 +332,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
     setCurrentImageBase64(imageBase64);
 
     // Desenhar esqueleto
-    drawConnectors(ctx, lm, Pose.POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+    drawConnectors(ctx, lm, poseConnectionsRef.current as any, { color: '#00FF00', lineWidth: 2 });
     drawLandmarks(ctx, lm, { color: '#FF0000', lineWidth: 1, radius: 3 });
 
     ctx.restore();
@@ -342,9 +375,12 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
 
         // Inicializar o MediaPipe Pose
         console.log('Iniciando Pose...');
-        let poseInstance: any;
+        let poseInstance: PoseInstance;
         try {
-          poseInstance = new Pose.Pose({
+          const { PoseCtor, poseConnections } = await resolvePoseModule();
+          poseConnectionsRef.current = poseConnections;
+
+          poseInstance = new PoseCtor({
             locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
           });
           console.log('Pose criado');
