@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import poseModule from '@mediapipe/pose';
 import { Camera } from '@mediapipe/camera_utils';
 import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 import type { PostureAnalysis, Landmark, AnatomicalPosition } from '../types';
@@ -17,23 +18,9 @@ type PoseInstance = {
 
 type PoseConstructor = new (config: { locateFile: (file: string) => string }) => PoseInstance;
 
-const resolvePoseModule = async (): Promise<{ PoseCtor: PoseConstructor; poseConnections: unknown }> => {
-  const moduleExports = await import('@mediapipe/pose');
-  const candidate = moduleExports as Record<string, any>;
-
-  const PoseCtor: PoseConstructor | undefined =
-    candidate.Pose ?? candidate.default?.Pose ?? candidate.default;
-
-  const poseConnections =
-    candidate.POSE_CONNECTIONS ??
-    candidate.default?.POSE_CONNECTIONS ??
-    [];
-
-  if (typeof PoseCtor !== 'function') {
-    throw new Error('Construtor Pose não encontrado no módulo @mediapipe/pose.');
-  }
-
-  return { PoseCtor, poseConnections };
+const poseApi = poseModule as unknown as {
+  Pose?: PoseConstructor;
+  POSE_CONNECTIONS?: unknown;
 };
 
 export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
@@ -377,8 +364,12 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
         console.log('Iniciando Pose...');
         let poseInstance: PoseInstance;
         try {
-          const { PoseCtor, poseConnections } = await resolvePoseModule();
-          poseConnectionsRef.current = poseConnections;
+          const PoseCtor = poseApi.Pose;
+          if (typeof PoseCtor !== 'function') {
+            throw new Error('Construtor Pose não encontrado no módulo @mediapipe/pose.');
+          }
+
+          poseConnectionsRef.current = poseApi.POSE_CONNECTIONS ?? [];
 
           poseInstance = new PoseCtor({
             locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
