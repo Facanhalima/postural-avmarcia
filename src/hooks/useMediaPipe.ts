@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Pose, POSE_CONNECTIONS } from '@mediapipe/pose';
+import * as Pose from '@mediapipe/pose';
 import { Camera } from '@mediapipe/camera_utils';
 import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 import type { PostureAnalysis, Landmark, AnatomicalPosition } from '../types';
@@ -299,7 +299,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
     setCurrentImageBase64(imageBase64);
 
     // Desenhar esqueleto
-    drawConnectors(ctx, lm, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+    drawConnectors(ctx, lm, Pose.POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
     drawLandmarks(ctx, lm, { color: '#FF0000', lineWidth: 1, radius: 3 });
 
     ctx.restore();
@@ -312,8 +312,9 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
     const initializePose = async () => {
       try {
         // Primeiro, pedir permissão explícita para acessar a câmera
+        let stream: MediaStream;
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({
+          stream = await navigator.mediaDevices.getUserMedia({
             video: { 
               facingMode: 'user',
               width: { ideal: 640 },
@@ -324,7 +325,9 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
 
           // Fechar o stream inicial para que o MediaPipe possa usá-lo
           stream.getTracks().forEach(track => track.stop());
+          console.log('Permissão de câmera concedida');
         } catch (permError: any) {
+          console.error('Erro ao solicitar permissão de câmera:', permError);
           if (permError.name === 'NotAllowedError') {
             setPermissionError(
               'Permissão de câmera negada. Por favor, verifique as configurações de privacidade do navegador.'
@@ -334,30 +337,47 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
           } else {
             setPermissionError(`Erro ao acessar câmera: ${permError.message}`);
           }
-          console.error('Erro ao solicitar permissão de câmera:', permError);
           return;
         }
 
-        // Agora inicializar o MediaPipe
-        const pose = new Pose({
-          locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-        });
+        // Inicializar o MediaPipe Pose
+        console.log('Iniciando Pose...');
+        let poseInstance: any;
+        try {
+          poseInstance = new Pose.Pose({
+            locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+          });
+          console.log('Pose criado');
+        } catch (poseConstructorError: any) {
+          console.error('Erro ao criar Pose:', poseConstructorError);
+          setPermissionError(`Erro ao carregar Pose: ${poseConstructorError.message}`);
+          return;
+        }
 
-        await pose.initialize();
+        try {
+          await poseInstance.initialize();
+          console.log('Pose inicializado');
+        } catch (poseInitError: any) {
+          console.error('Erro ao inicializar Pose:', poseInitError);
+          setPermissionError(`Erro ao inicializar Pose: ${poseInitError.message}`);
+          return;
+        }
 
-        pose.setOptions({
+        poseInstance.setOptions({
           modelComplexity: 1,
           smoothLandmarks: true,
           minDetectionConfidence: 0.5,
           minTrackingConfidence: 0.5
         });
 
-        pose.onResults(onResults);
+        poseInstance.onResults(onResults);
 
+        // Inicializar câmera
+        console.log('Iniciando câmera...');
         const camera = new Camera(videoRef.current!, {
           onFrame: async () => {
             if (videoRef.current) {
-              await pose.send({ image: videoRef.current });
+              await poseInstance.send({ image: videoRef.current });
             }
           },
           width: 640,
@@ -366,17 +386,18 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
 
         try {
           await camera.start();
+          console.log('Câmera iniciada com sucesso');
           setIsInitialized(true);
           setPermissionError('');
-        } catch (cameraError: any) {
-          console.error('Erro ao inicializar câmera:', cameraError);
+        } catch (cameraStartError: any) {
+          console.error('Erro ao iniciar câmera:', cameraStartError);
           setPermissionError(
-            'Erro ao inicializar câmera. Tente recarregar a página.'
+            `Erro ao iniciar câmera: ${cameraStartError.message}. Tente recarregar a página.`
           );
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Erro geral na inicialização:', error);
-        setPermissionError('Erro ao inicializar aplicação.');
+        setPermissionError(`Erro inesperado: ${error?.message || 'Erro desconhecido'}. Tente recarregar a página.`);
       }
     };
 
