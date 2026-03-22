@@ -16,6 +16,18 @@ export const usePDFGenerator = () => {
         currentY = resetY;
       }
     };
+
+    const normalizeImageData = (imageData: string): string => {
+      if (imageData.startsWith('data:image/')) {
+        return imageData;
+      }
+      return `data:image/jpeg;base64,${imageData}`;
+    };
+
+    const resolveImageFormat = (imageData: string): 'PNG' | 'JPEG' => {
+      const lower = imageData.toLowerCase();
+      return lower.includes('image/png') ? 'PNG' : 'JPEG';
+    };
     
     // Cabeçalho
     doc.setFillColor(31, 58, 147);
@@ -114,9 +126,9 @@ export const usePDFGenerator = () => {
       }
     }
 
-    // Detalhes por posição
+    // Detalhes por posição com imagem correspondente
     doc.setFont('helvetica', 'bold');
-    doc.text('ANÁLISE DETALHADA POR POSIÇÃO:', 20, currentY);
+    doc.text('ANÁLISE DETALHADA POR POSIÇÃO (COM IMAGENS):', 20, currentY);
     currentY += 10;
 
     const positionLabels = {
@@ -127,7 +139,9 @@ export const usePDFGenerator = () => {
     };
 
     sessionData.captures.forEach((capture) => {
-      ensureSpace(35);
+      const hasImage = Boolean(capture.imagemBase64);
+      const imageBlockHeight = hasImage ? 70 : 0;
+      ensureSpace(38 + imageBlockHeight);
 
       doc.setFont('helvetica', 'bold');
       doc.text(`${positionLabels[capture.position]}:`, 20, currentY);
@@ -143,6 +157,30 @@ export const usePDFGenerator = () => {
           currentY += 5;
         }
       });
+
+      if (hasImage) {
+        ensureSpace(72);
+        const imageData = normalizeImageData(capture.imagemBase64);
+        const imageFormat = resolveImageFormat(imageData);
+        const imageWidth = 80;
+        const imageHeight = 60;
+
+        doc.setDrawColor(200, 200, 200);
+        doc.roundedRect(25, currentY + 2, imageWidth + 4, imageHeight + 4, 2, 2, 'S');
+
+        try {
+          doc.addImage(imageData, imageFormat, 27, currentY + 4, imageWidth, imageHeight, undefined, 'FAST');
+          currentY += imageHeight + 10;
+        } catch (error) {
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(10);
+          doc.text('Não foi possível renderizar a imagem desta posição.', 27, currentY + 10);
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'normal');
+          currentY += 16;
+          console.error('Erro ao adicionar imagem no PDF:', error);
+        }
+      }
       
       currentY += 5;
     });
