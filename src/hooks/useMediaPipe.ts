@@ -308,37 +308,44 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
   useEffect(() => {
     if (!videoRef.current || !canvasRef.current) return;
 
-    const pose = new Pose({
-      locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-    });
+    const initializePose = async () => {
+      const pose = new Pose({
+        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+      });
 
-    pose.setOptions({
-      modelComplexity: 1,
-      smoothLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
+      await pose.initialize();
 
-    pose.onResults(onResults);
+      pose.setOptions({
+        modelComplexity: 1,
+        smoothLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
 
-    const camera = new Camera(videoRef.current, {
-      onFrame: async () => {
-        if (videoRef.current) {
-          await pose.send({ image: videoRef.current });
-        }
-      },
-      width: 640,
-      height: 480
-    });
+      pose.onResults(onResults);
 
-    camera.start().then(() => {
-      setIsInitialized(true);
-    }).catch((error) => {
-      console.error('Erro ao inicializar câmera:', error);
-    });
+      const camera = new Camera(videoRef.current!, {
+        onFrame: async () => {
+          if (videoRef.current) {
+            await pose.send({ image: videoRef.current });
+          }
+        },
+        width: 640,
+        height: 480
+      });
+
+      try {
+        await camera.start();
+        setIsInitialized(true);
+      } catch (error) {
+        console.error('Erro ao inicializar câmera:', error);
+      }
+    };
+
+    initializePose();
 
     return () => {
-      camera.stop();
+      // Cleanup if needed
     };
   }, [onResults]);
 
