@@ -20,7 +20,8 @@ function App() {
     canvasRef, 
     currentAnalysis, 
     currentImageBase64, 
-    isInitialized 
+    isInitialized,
+    permissionError
   } = useMediaPipe(sessionData.currentPosition);
 
   const handleCapture = () => {
@@ -49,6 +50,7 @@ function App() {
             currentPosition={sessionData.currentPosition}
             onCapture={handleCapture}
             canCapture={isInitialized && !sessionData.isComplete}
+            permissionError={permissionError}
           />
           
           {/* Botão de Reset */}

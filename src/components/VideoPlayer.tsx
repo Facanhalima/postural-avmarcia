@@ -8,6 +8,7 @@ interface VideoPlayerProps {
   currentPosition: AnatomicalPosition;
   onCapture: () => void;
   canCapture: boolean;
+  permissionError?: string;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -16,7 +17,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   isInitialized,
   currentPosition,
   onCapture,
-  canCapture
+  canCapture,
+  permissionError
 }) => {
   const positionInstructions = {
     'frente': 'Posicione o paciente de frente para a câmera',
@@ -42,12 +44,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         />
         {!isInitialized && (
           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="text-white text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-              <p>Inicializando câmera...</p>
-              <p className="text-sm opacity-75 mt-2">
-                Permita o acesso à câmera quando solicitado
-              </p>
+            <div className="text-white text-center px-4">
+              {permissionError ? (
+                <>
+                  <div className="text-red-400 mb-4">
+                    <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0 4v2M7.08 6.47A9 9 0 1021 12a9.005 9.005 0 00-13.92-5.53" />
+                    </svg>
+                  </div>
+                  <p className="font-semibold mb-2">Acesso à Câmera Negado</p>
+                  <p className="text-sm opacity-90 max-w-sm">{permissionError}</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-semibold transition-colors"
+                  >
+                    Tentar Novamente
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                  <p>Inicializando câmera...</p>
+                  <p className="text-sm opacity-75 mt-2">
+                    Permita o acesso à câmera quando solicitado
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}

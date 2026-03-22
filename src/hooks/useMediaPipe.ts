@@ -22,6 +22,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
     pes: 'Aguardando detecção...'
   });
   const [isInitialized, setIsInitialized] = useState(false);
+  const [permissionError, setPermissionError] = useState<string>('');
   const [currentImageBase64, setCurrentImageBase64] = useState<string>('');
 
   // Função para calcular ângulos
@@ -309,36 +310,73 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
     if (!videoRef.current || !canvasRef.current) return;
 
     const initializePose = async () => {
-      const pose = new Pose({
-        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-      });
-
-      await pose.initialize();
-
-      pose.setOptions({
-        modelComplexity: 1,
-        smoothLandmarks: true,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-      });
-
-      pose.onResults(onResults);
-
-      const camera = new Camera(videoRef.current!, {
-        onFrame: async () => {
-          if (videoRef.current) {
-            await pose.send({ image: videoRef.current });
-          }
-        },
-        width: 640,
-        height: 480
-      });
-
       try {
-        await camera.start();
-        setIsInitialized(true);
+        // Primeiro, pedir permissão explícita para acessar a câmera
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { 
+              facingMode: 'user',
+              width: { ideal: 640 },
+              height: { ideal: 480 }
+            },
+            audio: false
+          });
+
+          // Fechar o stream inicial para que o MediaPipe possa usá-lo
+          stream.getTracks().forEach(track => track.stop());
+        } catch (permError: any) {
+          if (permError.name === 'NotAllowedError') {
+            setPermissionError(
+              'Permissão de câmera negada. Por favor, verifique as configurações de privacidade do navegador.'
+            );
+          } else if (permError.name === 'NotFoundError') {
+            setPermissionError('Nenhuma câmera foi encontrada. Verifique se o dispositivo possui câmera.');
+          } else {
+            setPermissionError(`Erro ao acessar câmera: ${permError.message}`);
+          }
+          console.error('Erro ao solicitar permissão de câmera:', permError);
+          return;
+        }
+
+        // Agora inicializar o MediaPipe
+        const pose = new Pose({
+          locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+        });
+
+        await pose.initialize();
+
+        pose.setOptions({
+          modelComplexity: 1,
+          smoothLandmarks: true,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+
+        pose.onResults(onResults);
+
+        const camera = new Camera(videoRef.current!, {
+          onFrame: async () => {
+            if (videoRef.current) {
+              await pose.send({ image: videoRef.current });
+            }
+          },
+          width: 640,
+          height: 480
+        });
+
+        try {
+          await camera.start();
+          setIsInitialized(true);
+          setPermissionError('');
+        } catch (cameraError: any) {
+          console.error('Erro ao inicializar câmera:', cameraError);
+          setPermissionError(
+            'Erro ao inicializar câmera. Tente recarregar a página.'
+          );
+        }
       } catch (error) {
-        console.error('Erro ao inicializar câmera:', error);
+        console.error('Erro geral na inicialização:', error);
+        setPermissionError('Erro ao inicializar aplicação.');
       }
     };
 
@@ -354,6 +392,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
     canvasRef,
     currentAnalysis,
     currentImageBase64,
-    isInitialized
+    isInitialized,
+    permissionError
   };
 };
