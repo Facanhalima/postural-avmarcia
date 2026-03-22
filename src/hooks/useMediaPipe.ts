@@ -1,6 +1,4 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Camera } from '@mediapipe/camera_utils';
-import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 import type { PostureAnalysis, Landmark, AnatomicalPosition } from '../types';
 
 type PoseInstance = {
@@ -17,6 +15,32 @@ type PoseInstance = {
 
 type PoseConstructor = new (config: { locateFile: (file: string) => string }) => PoseInstance;
 
+type CameraOptions = {
+  onFrame: () => Promise<void>;
+  width: number;
+  height: number;
+};
+
+type CameraInstance = {
+  start: () => Promise<void>;
+  stop: () => void;
+};
+
+type CameraConstructor = new (video: HTMLVideoElement, options: CameraOptions) => CameraInstance;
+
+type DrawConnectorsFn = (
+  ctx: CanvasRenderingContext2D,
+  landmarks: Landmark[],
+  connections: any,
+  style: { color: string; lineWidth: number }
+) => void;
+
+type DrawLandmarksFn = (
+  ctx: CanvasRenderingContext2D,
+  landmarks: Landmark[],
+  style: { color: string; lineWidth: number; radius: number }
+) => void;
+
 type PoseApi = {
   PoseCtor: PoseConstructor;
   poseConnections: unknown;
@@ -26,11 +50,18 @@ declare global {
   interface Window {
     Pose?: PoseConstructor | { Pose?: PoseConstructor; POSE_CONNECTIONS?: unknown };
     POSE_CONNECTIONS?: unknown;
+    Camera?: CameraConstructor | { Camera?: CameraConstructor };
+    drawConnectors?: DrawConnectorsFn;
+    drawLandmarks?: DrawLandmarksFn;
   }
 }
 
 const POSE_CDN_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
+const CAMERA_CDN_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js';
+const DRAWING_CDN_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js';
 let poseScriptPromise: Promise<PoseApi> | null = null;
+let cameraScriptPromise: Promise<CameraConstructor> | null = null;
+let drawingScriptPromise: Promise<{ drawConnectors: DrawConnectorsFn; drawLandmarks: DrawLandmarksFn }> | null = null;
 
 const getPoseApiFromWindow = (): PoseApi | null => {
   if (typeof window === 'undefined') {
@@ -109,6 +140,143 @@ const loadPoseApi = (): Promise<PoseApi> => {
   return poseScriptPromise;
 };
 
+const getCameraCtorFromWindow = (): CameraConstructor | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  if (typeof window.Camera === 'function') {
+    return window.Camera;
+  }
+
+  if (window.Camera && typeof window.Camera === 'object' && typeof window.Camera.Camera === 'function') {
+    return window.Camera.Camera;
+  }
+
+  return null;
+};
+
+const loadCameraCtor = (): Promise<CameraConstructor> => {
+  const loaded = getCameraCtorFromWindow();
+  if (loaded) {
+    return Promise.resolve(loaded);
+  }
+
+  if (cameraScriptPromise) {
+    return cameraScriptPromise;
+  }
+
+  cameraScriptPromise = new Promise<CameraConstructor>((resolve, reject) => {
+    if (typeof document === 'undefined') {
+      reject(new Error('Ambiente sem document para carregar script da Camera.'));
+      return;
+    }
+
+    const existingScript = document.querySelector(`script[src="${CAMERA_CDN_URL}"]`) as HTMLScriptElement | null;
+    if (existingScript) {
+      existingScript.addEventListener('load', () => {
+        const cameraCtor = getCameraCtorFromWindow();
+        if (cameraCtor) {
+          resolve(cameraCtor);
+          return;
+        }
+        reject(new Error('Script da Camera carregou, mas construtor global não foi encontrado.'));
+      });
+      existingScript.addEventListener('error', () => {
+        reject(new Error('Falha ao carregar script da Camera.'));
+      });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = CAMERA_CDN_URL;
+    script.async = true;
+    script.onload = () => {
+      const cameraCtor = getCameraCtorFromWindow();
+      if (cameraCtor) {
+        resolve(cameraCtor);
+        return;
+      }
+      reject(new Error('Script da Camera carregou, mas construtor global não foi encontrado.'));
+    };
+    script.onerror = () => {
+      reject(new Error('Falha ao carregar script da Camera via CDN.'));
+    };
+
+    document.head.appendChild(script);
+  });
+
+  return cameraScriptPromise;
+};
+
+const getDrawingApiFromWindow = (): { drawConnectors: DrawConnectorsFn; drawLandmarks: DrawLandmarksFn } | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  if (typeof window.drawConnectors === 'function' && typeof window.drawLandmarks === 'function') {
+    return {
+      drawConnectors: window.drawConnectors,
+      drawLandmarks: window.drawLandmarks
+    };
+  }
+
+  return null;
+};
+
+const loadDrawingApi = (): Promise<{ drawConnectors: DrawConnectorsFn; drawLandmarks: DrawLandmarksFn }> => {
+  const loaded = getDrawingApiFromWindow();
+  if (loaded) {
+    return Promise.resolve(loaded);
+  }
+
+  if (drawingScriptPromise) {
+    return drawingScriptPromise;
+  }
+
+  drawingScriptPromise = new Promise((resolve, reject) => {
+    if (typeof document === 'undefined') {
+      reject(new Error('Ambiente sem document para carregar script do Drawing Utils.'));
+      return;
+    }
+
+    const existingScript = document.querySelector(`script[src="${DRAWING_CDN_URL}"]`) as HTMLScriptElement | null;
+    if (existingScript) {
+      existingScript.addEventListener('load', () => {
+        const drawingApi = getDrawingApiFromWindow();
+        if (drawingApi) {
+          resolve(drawingApi);
+          return;
+        }
+        reject(new Error('Script do Drawing Utils carregou, mas funções globais não foram encontradas.'));
+      });
+      existingScript.addEventListener('error', () => {
+        reject(new Error('Falha ao carregar script do Drawing Utils.'));
+      });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = DRAWING_CDN_URL;
+    script.async = true;
+    script.onload = () => {
+      const drawingApi = getDrawingApiFromWindow();
+      if (drawingApi) {
+        resolve(drawingApi);
+        return;
+      }
+      reject(new Error('Script do Drawing Utils carregou, mas funções globais não foram encontradas.'));
+    };
+    script.onerror = () => {
+      reject(new Error('Falha ao carregar script do Drawing Utils via CDN.'));
+    };
+
+    document.head.appendChild(script);
+  });
+
+  return drawingScriptPromise;
+};
+
 export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -130,6 +298,8 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
   const [permissionError, setPermissionError] = useState<string>('');
   const [currentImageBase64, setCurrentImageBase64] = useState<string>('');
   const poseConnectionsRef = useRef<unknown>([]);
+  const drawConnectorsRef = useRef<DrawConnectorsFn | null>(null);
+  const drawLandmarksRef = useRef<DrawLandmarksFn | null>(null);
 
   // Função para calcular ângulos
   const calcAngle = (p1: Landmark, p2: Landmark, p3: Landmark): number => {
@@ -405,8 +575,10 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
     setCurrentImageBase64(imageBase64);
 
     // Desenhar esqueleto
-    drawConnectors(ctx, lm, poseConnectionsRef.current as any, { color: '#00FF00', lineWidth: 2 });
-    drawLandmarks(ctx, lm, { color: '#FF0000', lineWidth: 1, radius: 3 });
+    if (drawConnectorsRef.current && drawLandmarksRef.current) {
+      drawConnectorsRef.current(ctx, lm, poseConnectionsRef.current as any, { color: '#00FF00', lineWidth: 2 });
+      drawLandmarksRef.current(ctx, lm, { color: '#FF0000', lineWidth: 1, radius: 3 });
+    }
 
     ctx.restore();
   }, [currentPosition, analyzePostureByPosition]);
@@ -450,9 +622,14 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
         console.log('Iniciando Pose...');
         let poseInstance: PoseInstance;
         try {
-          const poseApi = await loadPoseApi();
+          const [poseApi, drawingApi] = await Promise.all([
+            loadPoseApi(),
+            loadDrawingApi()
+          ]);
           const PoseCtor = poseApi.PoseCtor;
           poseConnectionsRef.current = poseApi.poseConnections;
+          drawConnectorsRef.current = drawingApi.drawConnectors;
+          drawLandmarksRef.current = drawingApi.drawLandmarks;
 
           poseInstance = new PoseCtor({
             locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
@@ -484,7 +661,8 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
 
         // Inicializar câmera
         console.log('Iniciando câmera...');
-        const camera = new Camera(videoRef.current!, {
+        const CameraCtor = await loadCameraCtor();
+        const camera = new CameraCtor(videoRef.current!, {
           onFrame: async () => {
             if (videoRef.current) {
               await poseInstance.send({ image: videoRef.current });
