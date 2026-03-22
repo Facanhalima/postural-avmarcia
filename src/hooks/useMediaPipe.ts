@@ -18,22 +18,48 @@ type PoseInstance = {
 type PoseConstructor = new (config: { locateFile: (file: string) => string }) => PoseInstance;
 
 type PoseApi = {
-  Pose?: PoseConstructor;
-  POSE_CONNECTIONS?: unknown;
+  PoseCtor: PoseConstructor;
+  poseConnections: unknown;
 };
 
 declare global {
   interface Window {
-    Pose?: PoseApi;
+    Pose?: PoseConstructor | { Pose?: PoseConstructor; POSE_CONNECTIONS?: unknown };
+    POSE_CONNECTIONS?: unknown;
   }
 }
 
 const POSE_CDN_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
 let poseScriptPromise: Promise<PoseApi> | null = null;
 
+const getPoseApiFromWindow = (): PoseApi | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  // UMD do MediaPipe normalmente injeta Pose como construtor global (window.Pose)
+  if (typeof window.Pose === 'function') {
+    return {
+      PoseCtor: window.Pose,
+      poseConnections: window.POSE_CONNECTIONS ?? []
+    };
+  }
+
+  // Em alguns ambientes, o global pode vir como objeto { Pose, POSE_CONNECTIONS }
+  if (window.Pose && typeof window.Pose === 'object' && typeof window.Pose.Pose === 'function') {
+    return {
+      PoseCtor: window.Pose.Pose,
+      poseConnections: window.Pose.POSE_CONNECTIONS ?? window.POSE_CONNECTIONS ?? []
+    };
+  }
+
+  return null;
+};
+
 const loadPoseApi = (): Promise<PoseApi> => {
-  if (typeof window !== 'undefined' && window.Pose) {
-    return Promise.resolve(window.Pose);
+  const loaded = getPoseApiFromWindow();
+  if (loaded) {
+    return Promise.resolve(loaded);
   }
 
   if (poseScriptPromise) {
@@ -49,11 +75,12 @@ const loadPoseApi = (): Promise<PoseApi> => {
     const existingScript = document.querySelector(`script[src="${POSE_CDN_URL}"]`) as HTMLScriptElement | null;
     if (existingScript) {
       existingScript.addEventListener('load', () => {
-        if (window.Pose) {
-          resolve(window.Pose);
-        } else {
-          reject(new Error('Script do Pose carregou, mas window.Pose não foi definido.'));
+        const poseApi = getPoseApiFromWindow();
+        if (poseApi) {
+          resolve(poseApi);
+          return;
         }
+        reject(new Error('Script do Pose carregou, mas construtor global não foi encontrado.'));
       });
       existingScript.addEventListener('error', () => {
         reject(new Error('Falha ao carregar script do Pose.'));
@@ -65,11 +92,12 @@ const loadPoseApi = (): Promise<PoseApi> => {
     script.src = POSE_CDN_URL;
     script.async = true;
     script.onload = () => {
-      if (window.Pose) {
-        resolve(window.Pose);
-      } else {
-        reject(new Error('Script do Pose carregou, mas window.Pose não foi definido.'));
+      const poseApi = getPoseApiFromWindow();
+      if (poseApi) {
+        resolve(poseApi);
+        return;
       }
+      reject(new Error('Script do Pose carregou, mas construtor global não foi encontrado.'));
     };
     script.onerror = () => {
       reject(new Error('Falha ao carregar script do Pose via CDN.'));
@@ -423,12 +451,8 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
         let poseInstance: PoseInstance;
         try {
           const poseApi = await loadPoseApi();
-          const PoseCtor = poseApi.Pose;
-          if (typeof PoseCtor !== 'function') {
-            throw new Error('Construtor Pose não encontrado no script do MediaPipe.');
-          }
-
-          poseConnectionsRef.current = poseApi.POSE_CONNECTIONS ?? [];
+          const PoseCtor = poseApi.PoseCtor;
+          poseConnectionsRef.current = poseApi.poseConnections;
 
           poseInstance = new PoseCtor({
             locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
