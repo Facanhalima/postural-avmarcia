@@ -9,6 +9,9 @@ interface VideoPlayerProps {
   onCapture: () => void;
   canCapture: boolean;
   permissionError?: string;
+  cameraFacingMode: 'user' | 'environment';
+  onToggleCamera: () => void;
+  videoDimensions: { width: number; height: number };
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -18,7 +21,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   currentPosition,
   onCapture,
   canCapture,
-  permissionError
+  permissionError,
+  cameraFacingMode,
+  onToggleCamera,
+  videoDimensions
 }) => {
   const positionInstructions = {
     'frente': 'Posicione o paciente de frente para a câmera',
@@ -29,17 +35,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   return (
     <div className="w-full flex flex-col items-center">
-      <div className="relative w-full max-w-[820px] aspect-[4/3] bg-black rounded-xl overflow-hidden shadow-lg">
+      <div
+        className="relative w-full max-w-[820px] bg-black rounded-xl overflow-hidden shadow-lg"
+        style={{ aspectRatio: `${videoDimensions.width} / ${videoDimensions.height}` }}
+      >
         <video
           ref={videoRef}
           className="hidden"
-          width={640}
-          height={480}
+          width={videoDimensions.width}
+          height={videoDimensions.height}
         />
         <canvas
           ref={canvasRef}
-          width={640}
-          height={480}
+          width={videoDimensions.width}
+          height={videoDimensions.height}
           className="absolute top-0 left-0 w-full h-full"
         />
         {!isInitialized && (
@@ -76,25 +85,34 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       </div>
       
       {/* Instruções e botão de captura */}
-      <div className="mt-4 text-center max-w-2xl px-2 sm:px-0">
+      <div className="mt-4 text-center max-w-2xl px-2 sm:px-0 w-full">
         <p className="text-gray-700 mb-3 text-sm sm:text-base">
           <span className="font-medium">Instrução:</span> {positionInstructions[currentPosition]}
         </p>
         <p className="text-xs sm:text-sm text-gray-600 mb-4">
           Use o simetrógrafo (grade azul) para referência de alinhamento postural
         </p>
-        
-        <button
-          onClick={onCapture}
-          disabled={!isInitialized || !canCapture}
-          className={`px-5 sm:px-6 py-3 rounded-lg font-semibold text-sm sm:text-base text-white transition-all duration-300 ${
-            isInitialized && canCapture
-              ? 'bg-blue-600 hover:bg-blue-700 hover:-translate-y-1 shadow-lg hover:shadow-xl'
-              : 'bg-gray-400 cursor-not-allowed'
-          }`}
-        >
-          {isInitialized ? 'Capturar Posição' : 'Aguarde...'}
-        </button>
+
+        <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+          <button
+            onClick={onCapture}
+            disabled={!isInitialized || !canCapture}
+            className={`px-5 sm:px-6 py-3 rounded-lg font-semibold text-sm sm:text-base text-white transition-all duration-300 ${
+              isInitialized && canCapture
+                ? 'bg-blue-600 hover:bg-blue-700 hover:-translate-y-1 shadow-lg hover:shadow-xl'
+                : 'bg-gray-400 cursor-not-allowed'
+            }`}
+          >
+            {isInitialized ? 'Capturar Posição' : 'Aguarde...'}
+          </button>
+
+          <button
+            onClick={onToggleCamera}
+            className="px-5 sm:px-6 py-3 rounded-lg font-semibold text-sm sm:text-base text-white bg-emerald-600 hover:bg-emerald-700 transition-all duration-300 shadow-lg hover:shadow-xl"
+          >
+            Usar câmera {cameraFacingMode === 'user' ? 'traseira' : 'frontal'}
+          </button>
+        </div>
       </div>
     </div>
   );

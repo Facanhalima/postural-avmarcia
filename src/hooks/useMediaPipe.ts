@@ -1,7 +1,10 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import type { PostureAnalysis, Landmark, AnatomicalPosition } from '../types';
 
+type CameraFacingMode = 'user' | 'environment';
+
 type PoseInstance = {
+  close?: () => Promise<void>;
   initialize: () => Promise<void>;
   setOptions: (options: {
     modelComplexity: number;
@@ -19,6 +22,7 @@ type CameraOptions = {
   onFrame: () => Promise<void>;
   width: number;
   height: number;
+  facingMode?: CameraFacingMode;
 };
 
 type CameraInstance = {
@@ -277,7 +281,7 @@ const loadDrawingApi = (): Promise<{ drawConnectors: DrawConnectorsFn; drawLandm
   return drawingScriptPromise;
 };
 
-export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
+export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMode: CameraFacingMode) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [currentAnalysis, setCurrentAnalysis] = useState<PostureAnalysis>({
@@ -297,9 +301,13 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [permissionError, setPermissionError] = useState<string>('');
   const [currentImageBase64, setCurrentImageBase64] = useState<string>('');
+  const [videoDimensions, setVideoDimensions] = useState({ width: 640, height: 480 });
   const poseConnectionsRef = useRef<unknown>([]);
   const drawConnectorsRef = useRef<DrawConnectorsFn | null>(null);
   const drawLandmarksRef = useRef<DrawLandmarksFn | null>(null);
+  const poseInstanceRef = useRef<PoseInstance | null>(null);
+  const cameraInstanceRef = useRef<CameraInstance | null>(null);
+  const videoDimensionsRef = useRef({ width: 640, height: 480 });
 
   // Função para calcular ângulos
   const calcAngle = (p1: Landmark, p2: Landmark, p3: Landmark): number => {
@@ -586,6 +594,10 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
   // Inicializar MediaPipe
   useEffect(() => {
     if (!videoRef.current || !canvasRef.current) return;
+    let isCancelled = false;
+
+    setIsInitialized(false);
+    setPermissionError('');
 
     const initializePose = async () => {
       try {
@@ -594,7 +606,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { 
-              facingMode: 'user',
+              facingMode: cameraFacingMode,
               width: { ideal: 640 },
               height: { ideal: 480 }
             },
@@ -634,6 +646,9 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
           poseInstance = new PoseCtor({
             locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
           });
+          if (isCancelled) return;
+
+          poseInstanceRef.current = poseInstance;
           console.log('Pose criado');
         } catch (poseConstructorError: any) {
           console.error('Erro ao criar Pose:', poseConstructorError);
@@ -665,15 +680,36 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
         const camera = new CameraCtor(videoRef.current!, {
           onFrame: async () => {
             if (videoRef.current) {
+              const currentWidth = videoRef.current.videoWidth || 640;
+              const currentHeight = videoRef.current.videoHeight || 480;
+              if (
+                currentWidth > 0 &&
+                currentHeight > 0 &&
+                (currentWidth !== videoDimensionsRef.current.width || currentHeight !== videoDimensionsRef.current.height)
+              ) {
+                videoDimensionsRef.current = { width: currentWidth, height: currentHeight };
+                setVideoDimensions({ width: currentWidth, height: currentHeight });
+
+                if (canvasRef.current) {
+                  canvasRef.current.width = currentWidth;
+                  canvasRef.current.height = currentHeight;
+                }
+              }
+
               await poseInstance.send({ image: videoRef.current });
             }
           },
           width: 640,
-          height: 480
+          height: 480,
+          facingMode: cameraFacingMode
         });
+
+        cameraInstanceRef.current = camera;
 
         try {
           await camera.start();
+          if (isCancelled) return;
+
           console.log('Câmera iniciada com sucesso');
           setIsInitialized(true);
           setPermissionError('');
@@ -692,9 +728,17 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
     initializePose();
 
     return () => {
-      // Cleanup if needed
+      isCancelled = true;
+      if (cameraInstanceRef.current) {
+        cameraInstanceRef.current.stop();
+        cameraInstanceRef.current = null;
+      }
+      if (poseInstanceRef.current) {
+        poseInstanceRef.current.close?.();
+        poseInstanceRef.current = null;
+      }
     };
-  }, [onResults]);
+  }, [onResults, cameraFacingMode]);
 
   return {
     videoRef,
@@ -702,6 +746,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
     currentAnalysis,
     currentImageBase64,
     isInitialized,
-    permissionError
+    permissionError,
+    videoDimensions
   };
 };
