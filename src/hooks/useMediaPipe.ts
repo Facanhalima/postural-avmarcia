@@ -1,5 +1,4 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import poseModule from '@mediapipe/pose';
 import { Camera } from '@mediapipe/camera_utils';
 import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 import type { PostureAnalysis, Landmark, AnatomicalPosition } from '../types';
@@ -18,9 +17,68 @@ type PoseInstance = {
 
 type PoseConstructor = new (config: { locateFile: (file: string) => string }) => PoseInstance;
 
-const poseApi = poseModule as unknown as {
+type PoseApi = {
   Pose?: PoseConstructor;
   POSE_CONNECTIONS?: unknown;
+};
+
+declare global {
+  interface Window {
+    Pose?: PoseApi;
+  }
+}
+
+const POSE_CDN_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
+let poseScriptPromise: Promise<PoseApi> | null = null;
+
+const loadPoseApi = (): Promise<PoseApi> => {
+  if (typeof window !== 'undefined' && window.Pose) {
+    return Promise.resolve(window.Pose);
+  }
+
+  if (poseScriptPromise) {
+    return poseScriptPromise;
+  }
+
+  poseScriptPromise = new Promise<PoseApi>((resolve, reject) => {
+    if (typeof document === 'undefined') {
+      reject(new Error('Ambiente sem document para carregar script do Pose.'));
+      return;
+    }
+
+    const existingScript = document.querySelector(`script[src="${POSE_CDN_URL}"]`) as HTMLScriptElement | null;
+    if (existingScript) {
+      existingScript.addEventListener('load', () => {
+        if (window.Pose) {
+          resolve(window.Pose);
+        } else {
+          reject(new Error('Script do Pose carregou, mas window.Pose não foi definido.'));
+        }
+      });
+      existingScript.addEventListener('error', () => {
+        reject(new Error('Falha ao carregar script do Pose.'));
+      });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = POSE_CDN_URL;
+    script.async = true;
+    script.onload = () => {
+      if (window.Pose) {
+        resolve(window.Pose);
+      } else {
+        reject(new Error('Script do Pose carregou, mas window.Pose não foi definido.'));
+      }
+    };
+    script.onerror = () => {
+      reject(new Error('Falha ao carregar script do Pose via CDN.'));
+    };
+
+    document.head.appendChild(script);
+  });
+
+  return poseScriptPromise;
 };
 
 export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
@@ -364,9 +422,10 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition) => {
         console.log('Iniciando Pose...');
         let poseInstance: PoseInstance;
         try {
+          const poseApi = await loadPoseApi();
           const PoseCtor = poseApi.Pose;
           if (typeof PoseCtor !== 'function') {
-            throw new Error('Construtor Pose não encontrado no módulo @mediapipe/pose.');
+            throw new Error('Construtor Pose não encontrado no script do MediaPipe.');
           }
 
           poseConnectionsRef.current = poseApi.POSE_CONNECTIONS ?? [];
