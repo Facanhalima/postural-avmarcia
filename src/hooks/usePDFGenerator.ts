@@ -68,7 +68,7 @@ export const usePDFGenerator = () => {
     doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(22);
-    doc.text('POSTURAI - LAUDO COMPLETO DE AVALIAÇÃO', 15, 25);
+    doc.text('LAUDO COMPLETO DE AVALIAÇÃO POSTURAL', 15, 25);
     
     // Dados do paciente
     doc.setTextColor(0, 0, 0);
@@ -183,6 +183,24 @@ export const usePDFGenerator = () => {
       doc.text(`${positionLabels[capture.position]}:`, 20, currentY);
       currentY += 7;
 
+      // Imagem primeiro
+      if (hasImage) {
+        ensureSpace(photoHeight + 12);
+        const photoX = 25;
+        const rendered = renderPhoto(capture.imagemBase64, photoX, currentY, photoWidth, photoHeight);
+        if (rendered) {
+          currentY += photoHeight + 10;
+        } else {
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(10);
+          doc.text('Não foi possível renderizar a imagem desta posição.', photoX + 2, currentY + 5);
+          doc.setFontSize(12);
+          doc.setFont('helvetica', 'normal');
+          currentY += 16;
+        }
+      }
+
+      // Depois a análise em texto
       doc.setFont('helvetica', 'normal');
       // Listar apenas análises relevantes por posição
       Object.entries(capture.analysis).forEach(([key, value]) => {
@@ -193,22 +211,6 @@ export const usePDFGenerator = () => {
           currentY += 5;
         }
       });
-
-      if (hasImage) {
-        ensureSpace(photoHeight + 12);
-        const photoX = 25;
-        const rendered = renderPhoto(capture.imagemBase64, photoX, currentY + 2, photoWidth, photoHeight);
-        if (rendered) {
-          currentY += photoHeight + 10;
-        } else {
-          doc.setFont('helvetica', 'italic');
-          doc.setFontSize(10);
-          doc.text('Não foi possível renderizar a imagem desta posição.', photoX + 2, currentY + 10);
-          doc.setFontSize(12);
-          doc.setFont('helvetica', 'normal');
-          currentY += 16;
-        }
-      }
       
       currentY += 5;
     });
