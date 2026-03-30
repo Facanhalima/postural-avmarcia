@@ -57,8 +57,35 @@ export interface TherapeuticPlan {
   alongamentos: string[];
 }
 
+export interface BodyCompositionData {
+  biotipo: string;
+  biotipoObesidade: string;
+}
+
+export interface PerimetryData {
+  pescoco: string;
+  torax: string;
+  cintura: string;
+  abdomen: string;
+  quadril: string;
+  bracoDireitoRelaxado: string;
+  bracoEsquerdoRelaxado: string;
+  bracoDireitoContraido: string;
+  bracoEsquerdoContraido: string;
+  antebracoDireito: string;
+  antebracoEsquerdo: string;
+  coxaDireitaProximal: string;
+  coxaEsquerdaProximal: string;
+  coxaDireitaMedial: string;
+  coxaEsquerdaMedial: string;
+  panturrilhaDireita: string;
+  panturrilhaEsquerda: string;
+}
+
 export interface PatientData {
   nome: string;
   idade: string;
   queixa: string;
+  composicaoCorporal: BodyCompositionData;
+  perimetria: PerimetryData;
 }

@@ -2,7 +2,27 @@ import React, { useState } from 'react';
 import { ResultsPanel } from './ResultsPanel';
 import { SessionProgress } from './SessionProgress';
 import { usePDFGenerator } from '../hooks/usePDFGenerator';
-import type { PostureAnalysis, PatientData, SessionData } from '../types';
+import type { BodyCompositionData, PerimetryData, PostureAnalysis, PatientData, SessionData } from '../types';
+
+const PERIMETRY_FIELDS: Array<{ key: keyof PerimetryData; label: string }> = [
+  { key: 'pescoco', label: 'Pescoco' },
+  { key: 'torax', label: 'Torax' },
+  { key: 'cintura', label: 'Cintura' },
+  { key: 'abdomen', label: 'Abdomen' },
+  { key: 'quadril', label: 'Quadril' },
+  { key: 'bracoDireitoRelaxado', label: 'Braco direito (relaxado)' },
+  { key: 'bracoEsquerdoRelaxado', label: 'Braco esquerdo (relaxado)' },
+  { key: 'bracoDireitoContraido', label: 'Braco direito (contraido)' },
+  { key: 'bracoEsquerdoContraido', label: 'Braco esquerdo (contraido)' },
+  { key: 'antebracoDireito', label: 'Antebraco direito' },
+  { key: 'antebracoEsquerdo', label: 'Antebraco esquerdo' },
+  { key: 'coxaDireitaProximal', label: 'Coxa direita (proximal)' },
+  { key: 'coxaEsquerdaProximal', label: 'Coxa esquerda (proximal)' },
+  { key: 'coxaDireitaMedial', label: 'Coxa direita (medial)' },
+  { key: 'coxaEsquerdaMedial', label: 'Coxa esquerda (medial)' },
+  { key: 'panturrilhaDireita', label: 'Panturrilha direita' },
+  { key: 'panturrilhaEsquerda', label: 'Panturrilha esquerda' }
+];
 
 interface SidebarProps {
   currentAnalysis: PostureAnalysis;
@@ -24,15 +44,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [patientData, setPatientData] = useState<PatientData>({
     nome: '',
     idade: '',
-    queixa: ''
+    queixa: '',
+    composicaoCorporal: {
+      biotipo: '',
+      biotipoObesidade: ''
+    },
+    perimetria: {
+      pescoco: '',
+      torax: '',
+      cintura: '',
+      abdomen: '',
+      quadril: '',
+      bracoDireitoRelaxado: '',
+      bracoEsquerdoRelaxado: '',
+      bracoDireitoContraido: '',
+      bracoEsquerdoContraido: '',
+      antebracoDireito: '',
+      antebracoEsquerdo: '',
+      coxaDireitaProximal: '',
+      coxaEsquerdaProximal: '',
+      coxaDireitaMedial: '',
+      coxaEsquerdaMedial: '',
+      panturrilhaDireita: '',
+      panturrilhaEsquerda: ''
+    }
   });
 
   const { generateConsolidatedReport } = usePDFGenerator();
 
-  const handleInputChange = (field: keyof PatientData, value: string) => {
+  const handleInputChange = (field: 'nome' | 'idade' | 'queixa', value: string) => {
     setPatientData(prev => ({
       ...prev,
       [field]: value
+    }));
+  };
+
+  const handleBodyCompositionChange = (field: keyof BodyCompositionData, value: string) => {
+    setPatientData(prev => ({
+      ...prev,
+      composicaoCorporal: {
+        ...prev.composicaoCorporal,
+        [field]: value
+      }
+    }));
+  };
+
+  const handlePerimetryChange = (field: keyof PerimetryData, value: string) => {
+    setPatientData(prev => ({
+      ...prev,
+      perimetria: {
+        ...prev.perimetria,
+        [field]: value
+      }
     }));
   };
 
@@ -70,6 +133,47 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onChange={(e) => handleInputChange('queixa', e.target.value)}
           className="w-full p-2.5 border border-gray-300 rounded-md resize-none h-20 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
         />
+
+        <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+          <h3 className="text-sm font-semibold text-gray-800 mb-2">Composicao Corporal</h3>
+          <div className="space-y-2">
+            <input
+              type="text"
+              placeholder="Biotipo"
+              value={patientData.composicaoCorporal.biotipo}
+              onChange={(e) => handleBodyCompositionChange('biotipo', e.target.value)}
+              className="w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+            />
+
+            <input
+              type="text"
+              placeholder="Biotipo de obesidade"
+              value={patientData.composicaoCorporal.biotipoObesidade}
+              onChange={(e) => handleBodyCompositionChange('biotipoObesidade', e.target.value)}
+              className="w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+          <h3 className="text-sm font-semibold text-gray-800 mb-2">Perimetria (cm)</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {PERIMETRY_FIELDS.map(({ key, label }) => (
+              <div key={key} className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-700">{label}</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  inputMode="decimal"
+                  placeholder="0,0"
+                  value={patientData.perimetria[key]}
+                  onChange={(e) => handlePerimetryChange(key, e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Progresso da Sessão */}

@@ -1,6 +1,26 @@
 import { useCallback } from 'react';
 import jsPDF from 'jspdf';
-import type { PatientData, SessionData } from '../types';
+import type { PatientData, PerimetryData, SessionData } from '../types';
+
+const PERIMETRY_LABELS: Array<{ key: keyof PerimetryData; label: string }> = [
+  { key: 'pescoco', label: 'Pescoco' },
+  { key: 'torax', label: 'Torax' },
+  { key: 'cintura', label: 'Cintura' },
+  { key: 'abdomen', label: 'Abdomen' },
+  { key: 'quadril', label: 'Quadril' },
+  { key: 'bracoDireitoRelaxado', label: 'Braco direito (relaxado)' },
+  { key: 'bracoEsquerdoRelaxado', label: 'Braco esquerdo (relaxado)' },
+  { key: 'bracoDireitoContraido', label: 'Braco direito (contraido)' },
+  { key: 'bracoEsquerdoContraido', label: 'Braco esquerdo (contraido)' },
+  { key: 'antebracoDireito', label: 'Antebraco direito' },
+  { key: 'antebracoEsquerdo', label: 'Antebraco esquerdo' },
+  { key: 'coxaDireitaProximal', label: 'Coxa direita (proximal)' },
+  { key: 'coxaEsquerdaProximal', label: 'Coxa esquerda (proximal)' },
+  { key: 'coxaDireitaMedial', label: 'Coxa direita (medial)' },
+  { key: 'coxaEsquerdaMedial', label: 'Coxa esquerda (medial)' },
+  { key: 'panturrilhaDireita', label: 'Panturrilha direita' },
+  { key: 'panturrilhaEsquerda', label: 'Panturrilha esquerda' }
+];
 
 export const usePDFGenerator = () => {
   const generateConsolidatedReport = useCallback((patientData: PatientData, sessionData: SessionData) => {
@@ -87,6 +107,37 @@ export const usePDFGenerator = () => {
       const queixaLines = doc.splitTextToSize(patientData.queixa, 170);
       doc.text(queixaLines, 20, currentY + 7);
       currentY += 7 + (queixaLines.length * 5) + 10;
+    }
+
+    // Composicao corporal
+    if (patientData.composicaoCorporal.biotipo || patientData.composicaoCorporal.biotipoObesidade) {
+      ensureSpace(24);
+      doc.setFont('helvetica', 'bold');
+      doc.text('COMPOSICAO CORPORAL:', 20, currentY);
+      currentY += 7;
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Biotipo: ${patientData.composicaoCorporal.biotipo || '--'}`, 20, currentY);
+      currentY += 6;
+      doc.text(`Biotipo de obesidade: ${patientData.composicaoCorporal.biotipoObesidade || '--'}`, 20, currentY);
+      currentY += 10;
+    }
+
+    // Perimetria
+    const perimetryRows = PERIMETRY_LABELS.filter(({ key }) => Boolean(patientData.perimetria[key]));
+    if (perimetryRows.length > 0) {
+      ensureSpace(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('PERIMETRIA (PLANILHA DE MEDIDAS):', 20, currentY);
+      currentY += 8;
+      doc.setFont('helvetica', 'normal');
+
+      perimetryRows.forEach(({ key, label }) => {
+        ensureSpace(6);
+        doc.text(`${label}: ${patientData.perimetria[key]} cm`, 22, currentY);
+        currentY += 5;
+      });
+
+      currentY += 6;
     }
 
     // Análise consolidada
