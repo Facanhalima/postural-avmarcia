@@ -63,6 +63,7 @@ export interface BodyCompositionData {
   imc: string;
   icq: string;
   riscoIcq: string;
+  padraoGorduraCorporal: string;
   gorduraCorporal: string;
   taxaMuscular: string;
   massaCorporalMagra: string;
@@ -105,6 +106,7 @@ export interface PerimetryData {
 export interface PatientData {
   nome: string;
   sexo: '' | 'homem' | 'mulher';
+  altura: string;
   idade: string;
   queixa: string;
   composicaoCorporal: BodyCompositionData;

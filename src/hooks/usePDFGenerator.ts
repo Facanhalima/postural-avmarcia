@@ -8,6 +8,7 @@ const BODY_COMPOSITION_LABELS: Array<{ key: keyof BodyCompositionData; label: st
   { key: 'imc', label: 'IMC' },
   { key: 'icq', label: 'ICQ (Cintura/Quadril)' },
   { key: 'riscoIcq', label: 'Classificação de Risco ICQ' },
+  { key: 'padraoGorduraCorporal', label: 'Padrão de Gordura Corporal' },
   { key: 'gorduraCorporal', label: 'Gordura Corporal', unit: '%' },
   { key: 'taxaMuscular', label: 'Taxa Muscular', unit: '%' },
   { key: 'massaCorporalMagra', label: 'Massa Corporal Magra', unit: 'kg' },
@@ -120,10 +121,11 @@ export const usePDFGenerator = () => {
     doc.setFontSize(12);
     doc.text(`Nome: ${patientData.nome || 'Paciente Anônimo'}`, 20, 50);
     doc.text(`Sexo: ${patientData.sexo ? patientData.sexo.toUpperCase() : '--'}`, 20, 57);
-    doc.text(`Idade: ${patientData.idade || '--'}`, 20, 64);
+    doc.text(`Altura: ${patientData.altura || '--'} m`, 20, 64);
+    doc.text(`Idade: ${patientData.idade || '--'}`, 20, 71);
     doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 150, 50);
     
-    let currentY = 70;
+    let currentY = 77;
     
     // Queixa principal
     if (patientData.queixa) {

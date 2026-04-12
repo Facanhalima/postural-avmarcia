@@ -33,9 +33,10 @@ const BODY_COMPOSITION_FIELDS: Array<{
   readOnly?: boolean;
 }> = [
   { key: 'peso', label: 'Peso', unit: 'kg', type: 'number', step: '0.1' },
-  { key: 'imc', label: 'IMC', type: 'number', step: '0.1' },
+  { key: 'imc', label: 'IMC', type: 'text', readOnly: true },
   { key: 'icq', label: 'ICQ (Cintura/Quadril)', type: 'text', readOnly: true },
   { key: 'riscoIcq', label: 'Risco do ICQ', type: 'text', readOnly: true },
+  //{ key: 'padraoGorduraCorporal', label: 'Padrão de Gordura Corporal', type: 'text', readOnly: true },
   { key: 'gorduraCorporal', label: 'Gordura Corporal', unit: '%', type: 'number', step: '0.1' },
   { key: 'taxaMuscular', label: 'Taxa Muscular', unit: '%', type: 'number', step: '0.1' },
   { key: 'massaCorporalMagra', label: 'Massa Corporal Magra', unit: 'kg', type: 'number', step: '0.1' },
@@ -52,7 +53,7 @@ const BODY_COMPOSITION_FIELDS: Array<{
   { key: 'pesoDaAgua', label: 'Peso da Água', unit: 'kg', type: 'number', step: '0.1' },
   { key: 'massaDeProteina', label: 'Massa de Proteína', unit: 'kg', type: 'number', step: '0.1' },
   { key: 'pesoCorporalIdeal', label: 'Peso Corporal Ideal', unit: 'kg', type: 'number', step: '0.1' },
-  { key: 'nivelObesidade', label: 'Nível de Obesidade', type: 'text' }
+  { key: 'nivelObesidade', label: 'Nível de Obesidade', type: 'text', readOnly: true }
 ];
 
 type IcqRiskBand = {
@@ -61,6 +62,40 @@ type IcqRiskBand = {
   lowMax: number;
   moderateMax: number;
   highMax: number;
+};
+
+type BiotypeKey = 'ectomorfo' | 'mesomorfo' | 'endomorfo';
+
+const BIOTYPE_CHARACTERISTICS: Record<BiotypeKey, { title: string; traits: string[]; metabolismo: string; foco: string }> = {
+  ectomorfo: {
+    title: 'Ectomorfo',
+    traits: ['Esguio', 'Ombros estreitos', 'Quadris estreitos', 'Braços longos', 'Pernas longas'],
+    metabolismo: 'Rápido, com dificuldade de ganhar peso e massa muscular.',
+    foco: 'Treino de força intenso, alta ingestão calórica e de carboidratos.'
+  },
+  mesomorfo: {
+    title: 'Mesomorfo',
+    traits: ['Estrutura óssea grande', 'Ombros largos', 'Cintura fina'],
+    metabolismo: 'Equilibrado, com facilidade de ganhar massa muscular e perder gordura.',
+    foco: 'Manutenção com treinos moderados a intensos e dieta equilibrada.'
+  },
+  endomorfo: {
+    title: 'Endomorfo',
+    traits: ['Corpo arredondado', 'Cintura larga', 'Ossos grandes'],
+    metabolismo: 'Lento, com facilidade para ganhar gordura e dificuldade para perdê-la.',
+    foco: 'Treino de força combinado com cardio, controle calórico e foco em proteínas.'
+  }
+};
+
+const extractDetectedBiotype = (biotypeText: string): BiotypeKey | null => {
+  const normalized = biotypeText.toLowerCase();
+  if (normalized.includes('predominância de ectomorfo')) return 'ectomorfo';
+  if (normalized.includes('predominância de mesomorfo')) return 'mesomorfo';
+  if (normalized.includes('predominância de endomorfo')) return 'endomorfo';
+  if (normalized.includes('ectomorfo')) return 'ectomorfo';
+  if (normalized.includes('mesomorfo')) return 'mesomorfo';
+  if (normalized.includes('endomorfo')) return 'endomorfo';
+  return null;
 };
 
 const ICQ_RISK_TABLE: Record<'homem' | 'mulher', IcqRiskBand[]> = {
@@ -96,6 +131,20 @@ const classifyIcqRisk = (sexo: '' | 'homem' | 'mulher', idade: string, icq: stri
   return 'Muito Alto';
 };
 
+const classifyImcObesityLevel = (imc: number): string => {
+  if (imc < 18.5) return 'Magreza (Grau 0)';
+  if (imc <= 24.9) return 'Normal (Grau 0)';
+  if (imc <= 29.9) return 'Sobrepeso (Grau 1)';
+  if (imc <= 39.9) return 'Obesidade (Grau 2)';
+  return 'Obesidade Grave (Grau 3)';
+};
+
+const calculateMaxHeartRate = (idade: string): number | null => {
+  const ageValue = Number.parseInt(idade, 10);
+  if (!Number.isFinite(ageValue) || ageValue <= 0) return null;
+  return 208 - (0.7 * ageValue);
+};
+
 interface SidebarProps {
   currentAnalysis: PostureAnalysis;
   estimatedBiotype: string;
@@ -120,9 +169,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     lastUpdated: '--'
   });
 
+  const detectedBiotype = extractDetectedBiotype(estimatedBiotype);
+  const detectedBiotypeProfile = detectedBiotype ? BIOTYPE_CHARACTERISTICS[detectedBiotype] : null;
+
   const [patientData, setPatientData] = useState<PatientData>({
     nome: '',
     sexo: '',
+    altura: '',
     idade: '',
     queixa: '',
     composicaoCorporal: {
@@ -131,6 +184,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       imc: '',
       icq: '',
       riscoIcq: '',
+      padraoGorduraCorporal: '',
       gorduraCorporal: '',
       taxaMuscular: '',
       massaCorporalMagra: '',
@@ -169,6 +223,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       panturrilhaEsquerda: ''
     }
   });
+
+  const maxHeartRate = calculateMaxHeartRate(patientData.idade);
+  const heartRateZones = maxHeartRate
+    ? [100, 90, 80, 70, 60, 50].map((percentage) => ({
+        percentage,
+        bpm: Math.round(maxHeartRate * (percentage / 100))
+      }))
+    : [];
 
   const { generateConsolidatedReport } = usePDFGenerator();
 
@@ -215,13 +277,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     const cintura = parseMeasure(patientData.perimetria.cintura);
     const quadril = parseMeasure(patientData.perimetria.quadril);
+    const peso = parseMeasure(patientData.composicaoCorporal.peso);
+    const altura = parseMeasure(patientData.altura);
 
     const nextIcq = Number.isFinite(cintura) && Number.isFinite(quadril) && quadril > 0
       ? (cintura / quadril).toFixed(2).replace('.', ',')
       : '';
 
+    const nextImcNumeric = Number.isFinite(peso) && Number.isFinite(altura) && altura > 0
+      ? peso / (altura * altura)
+      : NaN;
+    const nextImc = Number.isFinite(nextImcNumeric)
+      ? nextImcNumeric.toFixed(1).replace('.', ',')
+      : '';
+    const nextObesityLevel = Number.isFinite(nextImcNumeric)
+      ? classifyImcObesityLevel(nextImcNumeric)
+      : '';
+
+    const nextPattern = Number.isFinite(cintura) && Number.isFinite(quadril)
+      ? (cintura > quadril ? 'Androide' : cintura < quadril ? 'Ginoide' : 'Indeterminado')
+      : '';
+
+    const nextRisk = classifyIcqRisk(patientData.sexo, patientData.idade, nextIcq);
+
     setPatientData(prev => {
-      if (prev.composicaoCorporal.icq === nextIcq) {
+      if (
+        prev.composicaoCorporal.icq === nextIcq &&
+        prev.composicaoCorporal.imc === nextImc &&
+        prev.composicaoCorporal.nivelObesidade === nextObesityLevel &&
+        prev.composicaoCorporal.padraoGorduraCorporal === nextPattern &&
+        prev.composicaoCorporal.riscoIcq === nextRisk
+      ) {
         return prev;
       }
 
@@ -229,35 +315,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ...prev,
         composicaoCorporal: {
           ...prev.composicaoCorporal,
-          icq: nextIcq
-        }
-      };
-    });
-  }, [patientData.perimetria.cintura, patientData.perimetria.quadril]);
-
-  useEffect(() => {
-    const nextRisk = classifyIcqRisk(
-      patientData.sexo,
-      patientData.idade,
-      patientData.composicaoCorporal.icq
-    );
-
-    setPatientData((prev) => {
-      if (prev.composicaoCorporal.riscoIcq === nextRisk) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        composicaoCorporal: {
-          ...prev.composicaoCorporal,
+          imc: nextImc,
+          icq: nextIcq,
+          nivelObesidade: nextObesityLevel,
+          padraoGorduraCorporal: nextPattern,
           riscoIcq: nextRisk
         }
       };
     });
-  }, [patientData.sexo, patientData.idade, patientData.composicaoCorporal.icq]);
+  }, [
+    patientData.perimetria.cintura,
+    patientData.perimetria.quadril,
+    patientData.composicaoCorporal.peso,
+    patientData.altura,
+    patientData.sexo,
+    patientData.idade
+  ]);
 
-  const handleInputChange = (field: 'nome' | 'sexo' | 'idade' | 'queixa', value: string) => {
+  const handleInputChange = (field: 'nome' | 'sexo' | 'altura' | 'idade' | 'queixa', value: string) => {
     setPatientData(prev => ({
       ...prev,
       [field]: value
@@ -306,6 +381,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         
         <input
           type="number"
+          step="0.01"
+          inputMode="decimal"
+          placeholder="Altura (m)"
+          value={patientData.altura}
+          onChange={(e) => handleInputChange('altura', e.target.value)}
+          className="w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+        />
+
+        <input
+          type="number"
           placeholder="Idade"
           value={patientData.idade}
           onChange={(e) => handleInputChange('idade', e.target.value)}
@@ -329,6 +414,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="w-full p-2.5 border border-gray-300 rounded-md resize-none h-20 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
         />
 
+        <div className="rounded-lg border border-rose-300 bg-gradient-to-r from-rose-50 to-orange-50 p-3 shadow-sm">
+          <p className="text-xs text-rose-900 font-semibold tracking-wide">
+            FREQUENCIA CARDIACA MAXIMA
+          </p>
+          <p className="text-[11px] text-rose-800 mt-1">
+            Formula: Maxima = 208 - (0,7 x idade)
+          </p>
+          <p className="text-sm text-rose-900 font-semibold mt-2">
+            {maxHeartRate ? `${maxHeartRate.toFixed(1).replace('.', ',')} bpm` : 'Informe a idade para calcular'}
+          </p>
+
+          {heartRateZones.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
+              {heartRateZones.map(({ percentage, bpm }) => (
+                <div key={percentage} className="rounded-md border border-rose-200 bg-white/70 p-2 text-center">
+                  <p className="text-xs font-semibold text-rose-900">{percentage}%</p>
+                  <p className="text-sm text-rose-800">{bpm} bpm</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="rounded-lg border border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 p-3 shadow-sm">
               <p className="text-xs text-amber-900 font-semibold tracking-wide">
                 BIOTIPO MONITORADO PELA CAMERA
@@ -345,6 +453,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <p className="text-[11px] text-amber-700 mt-1">
                 Estimativa automatica baseada em landmarks. Confirmar com avaliacao clinica e antropometrica.
               </p>
+
+              {detectedBiotypeProfile && (
+                <div className="mt-3 border-t border-amber-200 pt-2">
+                  <p className="text-xs font-semibold text-amber-900">
+                    Características do biotipo detectado ({detectedBiotypeProfile.title})
+                  </p>
+                  <p className="text-[11px] text-amber-800 mt-1">
+                    {detectedBiotypeProfile.traits.join(' | ')}
+                  </p>
+                  <p className="text-[11px] text-amber-800 mt-1">
+                    <span className="font-semibold">Metabolismo:</span> {detectedBiotypeProfile.metabolismo}
+                  </p>
+                  <p className="text-[11px] text-amber-800 mt-1">
+                    <span className="font-semibold">Foco:</span> {detectedBiotypeProfile.foco}
+                  </p>
+                </div>
+              )}
+        </div>
+
+        <div className="rounded-lg border border-sky-300 bg-gradient-to-r from-sky-50 to-cyan-50 p-3 shadow-sm">
+          <p className="text-xs text-sky-900 font-semibold tracking-wide">
+            PADRÃO DE GORDURA CORPORAL
+          </p>
+          <p className="text-sm text-sky-800 mt-1">
+            {patientData.composicaoCorporal.padraoGorduraCorporal || 'Aguardando medidas de cintura e quadril...'}
+          </p>
+          <p className="text-[11px] text-sky-700 mt-2">
+            Androide: cintura maior que quadril, com maior concentracao de gordura visceral abdominal e maior risco metabolico e cardiovascular.
+          </p>
+          <p className="text-[11px] text-sky-700 mt-1">
+            Ginoide: cintura menor que quadril, com predominio gluteo-femoral, menor impacto metabolico e possiveis implicacoes ortopedicas.
+          </p>
+          <p className="text-[11px] text-sky-700 mt-1">
+            Classificacao calculada automaticamente a partir da perimetria.
+          </p>
         </div>
 
         <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
