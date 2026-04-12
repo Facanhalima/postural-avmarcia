@@ -1,9 +1,34 @@
 import { useCallback } from 'react';
 import jsPDF from 'jspdf';
-import type { PatientData, PerimetryData, SessionData } from '../types';
+import type { BodyCompositionData, PatientData, PerimetryData, SessionData } from '../types';
+
+const BODY_COMPOSITION_LABELS: Array<{ key: keyof BodyCompositionData; label: string; unit?: string }> = [
+  { key: 'biotipo', label: 'Biotipo (monitorado)' },
+  { key: 'peso', label: 'Peso', unit: 'kg' },
+  { key: 'imc', label: 'IMC' },
+  { key: 'icq', label: 'ICQ (Cintura/Quadril)' },
+  { key: 'riscoIcq', label: 'Classificação de Risco ICQ' },
+  { key: 'gorduraCorporal', label: 'Gordura Corporal', unit: '%' },
+  { key: 'taxaMuscular', label: 'Taxa Muscular', unit: '%' },
+  { key: 'massaCorporalMagra', label: 'Massa Corporal Magra', unit: 'kg' },
+  { key: 'gorduraSubcutanea', label: 'Gordura Subcutânea', unit: '%' },
+  { key: 'gorduraVisceral', label: 'Gordura Visceral' },
+  { key: 'aguaCorporal', label: 'Água Corporal', unit: '%' },
+  { key: 'musculoEsqueletico', label: 'Músculo Esquelético', unit: '%' },
+  { key: 'massaMuscular', label: 'Massa Muscular', unit: 'kg' },
+  { key: 'massaOssea', label: 'Massa Óssea', unit: 'kg' },
+  { key: 'proteina', label: 'Proteína', unit: '%' },
+  { key: 'tmb', label: 'TMB', unit: 'kcal' },
+  { key: 'idadeCorporal', label: 'Idade Corporal' },
+  { key: 'massaGorda', label: 'Massa Gorda', unit: 'kg' },
+  { key: 'pesoDaAgua', label: 'Peso da Água', unit: 'kg' },
+  { key: 'massaDeProteina', label: 'Massa de Proteína', unit: 'kg' },
+  { key: 'pesoCorporalIdeal', label: 'Peso Corporal Ideal', unit: 'kg' },
+  { key: 'nivelObesidade', label: 'Nível de Obesidade' }
+];
 
 const PERIMETRY_LABELS: Array<{ key: keyof PerimetryData; label: string }> = [
-  { key: 'pescoco', label: 'Pescoco' },
+  { key: 'ombro', label: 'Ombro' },
   { key: 'torax', label: 'Torax' },
   { key: 'cintura', label: 'Cintura' },
   { key: 'abdomen', label: 'Abdomen' },
@@ -94,7 +119,8 @@ export const usePDFGenerator = () => {
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(12);
     doc.text(`Nome: ${patientData.nome || 'Paciente Anônimo'}`, 20, 50);
-    doc.text(`Idade: ${patientData.idade || '--'}`, 20, 57);
+    doc.text(`Sexo: ${patientData.sexo ? patientData.sexo.toUpperCase() : '--'}`, 20, 57);
+    doc.text(`Idade: ${patientData.idade || '--'}`, 20, 64);
     doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 150, 50);
     
     let currentY = 70;
@@ -110,15 +136,21 @@ export const usePDFGenerator = () => {
     }
 
     // Composicao corporal
-    if (patientData.composicaoCorporal.biotipo || patientData.composicaoCorporal.biotipoObesidade) {
+    const bodyCompositionRows = BODY_COMPOSITION_LABELS.filter(({ key }) => Boolean(patientData.composicaoCorporal[key]));
+    if (bodyCompositionRows.length > 0) {
       ensureSpace(24);
       doc.setFont('helvetica', 'bold');
       doc.text('COMPOSICAO CORPORAL:', 20, currentY);
       currentY += 7;
       doc.setFont('helvetica', 'normal');
-      doc.text(`Biotipo: ${patientData.composicaoCorporal.biotipo || '--'}`, 20, currentY);
-      currentY += 6;
-      doc.text(`Biotipo de obesidade: ${patientData.composicaoCorporal.biotipoObesidade || '--'}`, 20, currentY);
+
+      bodyCompositionRows.forEach(({ key, label, unit }) => {
+        ensureSpace(6);
+        const suffix = unit ? ` ${unit}` : '';
+        doc.text(`${label}: ${patientData.composicaoCorporal[key]}${suffix}`, 20, currentY);
+        currentY += 5;
+      });
+
       currentY += 10;
     }
 

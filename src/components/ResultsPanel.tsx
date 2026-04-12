@@ -25,7 +25,8 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ analysis, currentPos
       case 'lado-direito':
       case 'lado-esquerdo':
         return [
-          { label: 'Cabeça/Cervical', value: analysis.cervical },
+          { label: 'Cabeça', value: analysis.cabeca },
+          { label: 'Ombro', value: analysis.ombro },
           { label: 'Coluna Torácica', value: analysis.coluna },
           { label: 'Pelve/Quadril', value: analysis.quadril },
           { label: 'Joelhos', value: analysis.joelho },

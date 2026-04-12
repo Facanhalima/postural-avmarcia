@@ -59,11 +59,31 @@ export interface TherapeuticPlan {
 
 export interface BodyCompositionData {
   biotipo: string;
-  biotipoObesidade: string;
+  peso: string;
+  imc: string;
+  icq: string;
+  riscoIcq: string;
+  gorduraCorporal: string;
+  taxaMuscular: string;
+  massaCorporalMagra: string;
+  gorduraSubcutanea: string;
+  gorduraVisceral: string;
+  aguaCorporal: string;
+  musculoEsqueletico: string;
+  massaMuscular: string;
+  massaOssea: string;
+  proteina: string;
+  tmb: string;
+  idadeCorporal: string;
+  massaGorda: string;
+  pesoDaAgua: string;
+  massaDeProteina: string;
+  pesoCorporalIdeal: string;
+  nivelObesidade: string;
 }
 
 export interface PerimetryData {
-  pescoco: string;
+  ombro: string;
   torax: string;
   cintura: string;
   abdomen: string;
@@ -84,6 +104,7 @@ export interface PerimetryData {
 
 export interface PatientData {
   nome: string;
+  sexo: '' | 'homem' | 'mulher';
   idade: string;
   queixa: string;
   composicaoCorporal: BodyCompositionData;

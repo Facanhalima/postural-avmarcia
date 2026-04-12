@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ResultsPanel } from './ResultsPanel';
 import { SessionProgress } from './SessionProgress';
 import { usePDFGenerator } from '../hooks/usePDFGenerator';
 import type { BodyCompositionData, PerimetryData, PostureAnalysis, PatientData, SessionData } from '../types';
 
 const PERIMETRY_FIELDS: Array<{ key: keyof PerimetryData; label: string }> = [
-  { key: 'pescoco', label: 'Pescoco' },
+  { key: 'ombro', label: 'Ombro' },
   { key: 'torax', label: 'Torax' },
   { key: 'cintura', label: 'Cintura' },
   { key: 'abdomen', label: 'Abdomen' },
@@ -24,8 +24,81 @@ const PERIMETRY_FIELDS: Array<{ key: keyof PerimetryData; label: string }> = [
   { key: 'panturrilhaEsquerda', label: 'Panturrilha esquerda' }
 ];
 
+const BODY_COMPOSITION_FIELDS: Array<{
+  key: Exclude<keyof BodyCompositionData, 'biotipo'>;
+  label: string;
+  unit?: string;
+  type?: 'number' | 'text';
+  step?: string;
+  readOnly?: boolean;
+}> = [
+  { key: 'peso', label: 'Peso', unit: 'kg', type: 'number', step: '0.1' },
+  { key: 'imc', label: 'IMC', type: 'number', step: '0.1' },
+  { key: 'icq', label: 'ICQ (Cintura/Quadril)', type: 'text', readOnly: true },
+  { key: 'riscoIcq', label: 'Risco do ICQ', type: 'text', readOnly: true },
+  { key: 'gorduraCorporal', label: 'Gordura Corporal', unit: '%', type: 'number', step: '0.1' },
+  { key: 'taxaMuscular', label: 'Taxa Muscular', unit: '%', type: 'number', step: '0.1' },
+  { key: 'massaCorporalMagra', label: 'Massa Corporal Magra', unit: 'kg', type: 'number', step: '0.1' },
+  { key: 'gorduraSubcutanea', label: 'Gordura Subcutânea', unit: '%', type: 'number', step: '0.1' },
+  { key: 'gorduraVisceral', label: 'Gordura Visceral', type: 'number', step: '0.1' },
+  { key: 'aguaCorporal', label: 'Água Corporal', unit: '%', type: 'number', step: '0.1' },
+  { key: 'musculoEsqueletico', label: 'Músculo Esquelético', unit: '%', type: 'number', step: '0.1' },
+  { key: 'massaMuscular', label: 'Massa Muscular', unit: 'kg', type: 'number', step: '0.1' },
+  { key: 'massaOssea', label: 'Massa Óssea', unit: 'kg', type: 'number', step: '0.1' },
+  { key: 'proteina', label: 'Proteína', unit: '%', type: 'number', step: '0.1' },
+  { key: 'tmb', label: 'TMB', unit: 'kcal', type: 'number', step: '1' },
+  { key: 'idadeCorporal', label: 'Idade Corporal', type: 'number', step: '1' },
+  { key: 'massaGorda', label: 'Massa Gorda', unit: 'kg', type: 'number', step: '0.1' },
+  { key: 'pesoDaAgua', label: 'Peso da Água', unit: 'kg', type: 'number', step: '0.1' },
+  { key: 'massaDeProteina', label: 'Massa de Proteína', unit: 'kg', type: 'number', step: '0.1' },
+  { key: 'pesoCorporalIdeal', label: 'Peso Corporal Ideal', unit: 'kg', type: 'number', step: '0.1' },
+  { key: 'nivelObesidade', label: 'Nível de Obesidade', type: 'text' }
+];
+
+type IcqRiskBand = {
+  minAge: number;
+  maxAge: number;
+  lowMax: number;
+  moderateMax: number;
+  highMax: number;
+};
+
+const ICQ_RISK_TABLE: Record<'homem' | 'mulher', IcqRiskBand[]> = {
+  mulher: [
+    { minAge: 20, maxAge: 29, lowMax: 0.71, moderateMax: 0.77, highMax: 0.82 },
+    { minAge: 30, maxAge: 39, lowMax: 0.72, moderateMax: 0.78, highMax: 0.84 },
+    { minAge: 40, maxAge: 49, lowMax: 0.73, moderateMax: 0.79, highMax: 0.87 },
+    { minAge: 50, maxAge: 59, lowMax: 0.74, moderateMax: 0.81, highMax: 0.88 },
+    { minAge: 60, maxAge: 69, lowMax: 0.76, moderateMax: 0.83, highMax: 0.9 }
+  ],
+  homem: [
+    { minAge: 20, maxAge: 29, lowMax: 0.83, moderateMax: 0.88, highMax: 0.94 },
+    { minAge: 30, maxAge: 39, lowMax: 0.84, moderateMax: 0.91, highMax: 0.96 },
+    { minAge: 40, maxAge: 49, lowMax: 0.88, moderateMax: 0.95, highMax: 1.0 },
+    { minAge: 50, maxAge: 59, lowMax: 0.9, moderateMax: 0.96, highMax: 1.02 },
+    { minAge: 60, maxAge: 69, lowMax: 0.91, moderateMax: 0.98, highMax: 1.03 }
+  ]
+};
+
+const classifyIcqRisk = (sexo: '' | 'homem' | 'mulher', idade: string, icq: string): string => {
+  if (!sexo) return '';
+
+  const ageValue = Number.parseInt(idade, 10);
+  const icqValue = Number.parseFloat(icq.replace(',', '.'));
+  if (!Number.isFinite(ageValue) || !Number.isFinite(icqValue)) return '';
+
+  const band = ICQ_RISK_TABLE[sexo].find((item) => ageValue >= item.minAge && ageValue <= item.maxAge);
+  if (!band) return 'Sem referência para esta idade (20-69 anos)';
+
+  if (icqValue < band.lowMax) return 'Baixo';
+  if (icqValue <= band.moderateMax) return 'Moderado';
+  if (icqValue <= band.highMax) return 'Alto';
+  return 'Muito Alto';
+};
+
 interface SidebarProps {
   currentAnalysis: PostureAnalysis;
+  estimatedBiotype: string;
   sessionData: SessionData;
   currentPositionLabel: string;
   currentInstruction: string;
@@ -35,22 +108,49 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentAnalysis,
+  estimatedBiotype,
   sessionData,
   currentPositionLabel,
   currentInstruction,
   progressPercentage,
   totalSteps
 }) => {
+  const [biotypeEventInfo, setBiotypeEventInfo] = useState({
+    sampleCount: 0,
+    lastUpdated: '--'
+  });
+
   const [patientData, setPatientData] = useState<PatientData>({
     nome: '',
+    sexo: '',
     idade: '',
     queixa: '',
     composicaoCorporal: {
       biotipo: '',
-      biotipoObesidade: ''
+      peso: '',
+      imc: '',
+      icq: '',
+      riscoIcq: '',
+      gorduraCorporal: '',
+      taxaMuscular: '',
+      massaCorporalMagra: '',
+      gorduraSubcutanea: '',
+      gorduraVisceral: '',
+      aguaCorporal: '',
+      musculoEsqueletico: '',
+      massaMuscular: '',
+      massaOssea: '',
+      proteina: '',
+      tmb: '',
+      idadeCorporal: '',
+      massaGorda: '',
+      pesoDaAgua: '',
+      massaDeProteina: '',
+      pesoCorporalIdeal: '',
+      nivelObesidade: ''
     },
     perimetria: {
-      pescoco: '',
+      ombro: '',
       torax: '',
       cintura: '',
       abdomen: '',
@@ -72,7 +172,92 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const { generateConsolidatedReport } = usePDFGenerator();
 
-  const handleInputChange = (field: 'nome' | 'idade' | 'queixa', value: string) => {
+  useEffect(() => {
+    const hasSuggestion =
+      estimatedBiotype &&
+      !estimatedBiotype.toLowerCase().includes('aguardando') &&
+      !estimatedBiotype.toLowerCase().includes('coletando');
+
+    if (!hasSuggestion) return;
+
+    setPatientData(prev => ({
+      ...prev,
+      composicaoCorporal: {
+        ...prev.composicaoCorporal,
+        biotipo: estimatedBiotype
+      }
+    }));
+  }, [estimatedBiotype]);
+
+  useEffect(() => {
+    const onMonitoringEvent = (event: Event) => {
+      const customEvent = event as CustomEvent<{ biotype?: string; sampleCount?: number; timestamp?: string }>;
+      const detail = customEvent.detail ?? {};
+      if (!detail.timestamp) return;
+
+      const formattedTime = new Date(detail.timestamp).toLocaleTimeString('pt-BR');
+      setBiotypeEventInfo({
+        sampleCount: detail.sampleCount ?? 0,
+        lastUpdated: formattedTime
+      });
+    };
+
+    window.addEventListener('biotype-monitoring', onMonitoringEvent);
+    return () => window.removeEventListener('biotype-monitoring', onMonitoringEvent);
+  }, []);
+
+  useEffect(() => {
+    const parseMeasure = (raw: string): number => {
+      const normalized = raw.replace(',', '.').trim();
+      const parsed = Number.parseFloat(normalized);
+      return Number.isFinite(parsed) ? parsed : NaN;
+    };
+
+    const cintura = parseMeasure(patientData.perimetria.cintura);
+    const quadril = parseMeasure(patientData.perimetria.quadril);
+
+    const nextIcq = Number.isFinite(cintura) && Number.isFinite(quadril) && quadril > 0
+      ? (cintura / quadril).toFixed(2).replace('.', ',')
+      : '';
+
+    setPatientData(prev => {
+      if (prev.composicaoCorporal.icq === nextIcq) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        composicaoCorporal: {
+          ...prev.composicaoCorporal,
+          icq: nextIcq
+        }
+      };
+    });
+  }, [patientData.perimetria.cintura, patientData.perimetria.quadril]);
+
+  useEffect(() => {
+    const nextRisk = classifyIcqRisk(
+      patientData.sexo,
+      patientData.idade,
+      patientData.composicaoCorporal.icq
+    );
+
+    setPatientData((prev) => {
+      if (prev.composicaoCorporal.riscoIcq === nextRisk) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        composicaoCorporal: {
+          ...prev.composicaoCorporal,
+          riscoIcq: nextRisk
+        }
+      };
+    });
+  }, [patientData.sexo, patientData.idade, patientData.composicaoCorporal.icq]);
+
+  const handleInputChange = (field: 'nome' | 'sexo' | 'idade' | 'queixa', value: string) => {
     setPatientData(prev => ({
       ...prev,
       [field]: value
@@ -126,6 +311,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onChange={(e) => handleInputChange('idade', e.target.value)}
           className="w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
         />
+
+        <select
+          value={patientData.sexo}
+          onChange={(e) => handleInputChange('sexo', e.target.value)}
+          className="w-full p-2.5 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+        >
+          <option value="">Sexo do paciente</option>
+          <option value="homem">Homem</option>
+          <option value="mulher">Mulher</option>
+        </select>
         
         <textarea
           placeholder="Queixa principal e histórico..."
@@ -134,24 +329,51 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="w-full p-2.5 border border-gray-300 rounded-md resize-none h-20 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
         />
 
+        <div className="rounded-lg border border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 p-3 shadow-sm">
+              <p className="text-xs text-amber-900 font-semibold tracking-wide">
+                BIOTIPO MONITORADO PELA CAMERA
+              </p>
+              <p className="text-sm text-amber-800 mt-1">
+                {estimatedBiotype}
+              </p>
+              <p className="text-[11px] text-amber-700 mt-2">
+                Importancia: o biotipo orienta a interpretacao de proporcoes corporais, ganho/perda de massa e personalizacao da conduta terapeutica.
+              </p>
+              <p className="text-[11px] text-amber-700 mt-1">
+                Monitoramento ativo: {biotypeEventInfo.sampleCount} amostras | ultima atualizacao: {biotypeEventInfo.lastUpdated}
+              </p>
+              <p className="text-[11px] text-amber-700 mt-1">
+                Estimativa automatica baseada em landmarks. Confirmar com avaliacao clinica e antropometrica.
+              </p>
+        </div>
+
         <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
           <h3 className="text-sm font-semibold text-gray-800 mb-2">Composicao Corporal</h3>
-          <div className="space-y-2">
-            <input
-              type="text"
-              placeholder="Biotipo"
-              value={patientData.composicaoCorporal.biotipo}
-              onChange={(e) => handleBodyCompositionChange('biotipo', e.target.value)}
-              className="w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
-
-            <input
-              type="text"
-              placeholder="Biotipo de obesidade"
-              value={patientData.composicaoCorporal.biotipoObesidade}
-              onChange={(e) => handleBodyCompositionChange('biotipoObesidade', e.target.value)}
-              className="w-full p-2.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {BODY_COMPOSITION_FIELDS.map(({ key, label, unit, type = 'number', step = '0.1', readOnly = false }) => (
+              <div key={key} className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-gray-700">{label}{unit ? ` (${unit})` : ''}</label>
+                <div className="flex items-center gap-1">
+                  <input
+                    type={type}
+                    step={type === 'number' ? step : undefined}
+                    inputMode={type === 'number' ? 'decimal' : undefined}
+                    placeholder={readOnly ? 'Calculado automaticamente' : type === 'number' ? '0,0' : 'Preencher'}
+                    value={patientData.composicaoCorporal[key]}
+                    readOnly={readOnly}
+                    onChange={(e) => handleBodyCompositionChange(key, e.target.value)}
+                    className={`w-full p-2 border rounded-md text-sm outline-none ${
+                      readOnly
+                        ? 'bg-gray-100 border-gray-200 text-gray-600 cursor-not-allowed'
+                        : 'border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent'
+                    }`}
+                  />
+                  {unit && (
+                    <span className="text-xs text-gray-500 min-w-10 text-center">{unit}</span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

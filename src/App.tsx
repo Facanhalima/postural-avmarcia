@@ -22,6 +22,7 @@ function App() {
     videoRef, 
     canvasRef, 
     currentAnalysis, 
+    estimatedBiotype,
     currentImageBase64, 
     isInitialized,
     permissionError,
@@ -78,6 +79,7 @@ function App() {
         </div>
         <Sidebar
           currentAnalysis={currentAnalysis}
+          estimatedBiotype={estimatedBiotype}
           sessionData={sessionData}
           currentPositionLabel={getCurrentPositionLabel()}
           currentInstruction={getCurrentInstruction()}

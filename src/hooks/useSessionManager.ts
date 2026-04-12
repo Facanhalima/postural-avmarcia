@@ -51,7 +51,7 @@ const THERAPEUTIC_LIBRARY: Record<IssueKey, TherapeuticPlan> = {
     ]
   },
   'ombros-torax': {
-    problema: 'Assimetria de ombros/escápulas ou rotação torácica',
+    problema: 'Assimetria, anteriorização de ombros/escápulas ou rotação torácica',
     exercicios: [
       'Y-T-W em decúbito ventral ou faixa elástica - 3x10 repetições',
       'Serratus punch com faixa elástica - 3x12 repetições',
@@ -183,12 +183,12 @@ export const useSessionManager = () => {
     captures.forEach(capture => {
       const { position, analysis } = capture;
 
-      if (hasAnyTerm(analysis.cabeca, ['inclinação', 'rotação']) || hasAnyTerm(analysis.cervical, ['protrusão'])) {
+      if (hasAnyTerm(analysis.cabeca, ['inclinação', 'rotação', 'protrusão']) || hasAnyTerm(analysis.cervical, ['protrusão'])) {
         registerIssue(`Alteração de cabeça/cervical identificada na ${describePosition(position)}`, 2, 'cabeca-cervical');
       }
 
-      if (hasAnyTerm(analysis.ombro, ['desnível', 'assimetria']) || hasAnyTerm(analysis.torax, ['rotação', 'assimetria', 'convexidade'])) {
-        registerIssue(`Assimetria de ombros/tórax observada na ${describePosition(position)}`, 2, 'ombros-torax');
+      if (hasAnyTerm(analysis.ombro, ['desnível', 'assimetria', 'anteriorização', 'protração']) || hasAnyTerm(analysis.torax, ['rotação', 'assimetria', 'convexidade'])) {
+        registerIssue(`Alteração de ombros/escápulas ou tórax observada na ${describePosition(position)}`, 2, 'ombros-torax');
       }
 
       if (hasAnyTerm(analysis.coluna, ['escoliose', 'desvio lateral', 'hipercifose', 'retificação'])) {

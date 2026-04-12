@@ -302,12 +302,14 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
   const [permissionError, setPermissionError] = useState<string>('');
   const [currentImageBase64, setCurrentImageBase64] = useState<string>('');
   const [videoDimensions, setVideoDimensions] = useState({ width: 640, height: 480 });
+  const [estimatedBiotype, setEstimatedBiotype] = useState<string>('Aguardando leitura frontal...');
   const poseConnectionsRef = useRef<unknown>([]);
   const drawConnectorsRef = useRef<DrawConnectorsFn | null>(null);
   const drawLandmarksRef = useRef<DrawLandmarksFn | null>(null);
   const poseInstanceRef = useRef<PoseInstance | null>(null);
   const cameraInstanceRef = useRef<CameraInstance | null>(null);
   const videoDimensionsRef = useRef({ width: 640, height: 480 });
+  const biotypeVotesRef = useRef<Array<'ectomorfo' | 'mesomorfo' | 'endomorfo'>>([]);
 
   // Função para calcular ângulos
   const calcAngle = (p1: Landmark, p2: Landmark, p3: Landmark): number => {
@@ -324,6 +326,114 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
   };
 
   const percentual = (value: number): number => Math.abs(value) * 100;
+
+  const distance = (p1: Landmark, p2: Landmark): number => {
+    return Math.hypot(p2.x - p1.x, p2.y - p1.y);
+  };
+
+  const midpoint = (p1: Landmark, p2: Landmark): Landmark => {
+    return {
+      x: (p1.x + p2.x) / 2,
+      y: (p1.y + p2.y) / 2
+    };
+  };
+
+  const estimateSomatotype = useCallback((lm: Landmark[]): 'ectomorfo' | 'mesomorfo' | 'endomorfo' | null => {
+    if (!lm[11] || !lm[12] || !lm[23] || !lm[24] || !lm[13] || !lm[14] || !lm[15] || !lm[16] || !lm[25] || !lm[26] || !lm[27] || !lm[28]) {
+      return null;
+    }
+
+    const shoulderWidth = distance(lm[11], lm[12]);
+    const hipWidth = distance(lm[23], lm[24]);
+    const trunkCenterShoulder = midpoint(lm[11], lm[12]);
+    const trunkCenterHip = midpoint(lm[23], lm[24]);
+    const trunkLength = distance(trunkCenterShoulder, trunkCenterHip);
+
+    if (trunkLength <= 0.0001) {
+      return null;
+    }
+
+    const armLength = (distance(lm[11], lm[13]) + distance(lm[13], lm[15]) + distance(lm[12], lm[14]) + distance(lm[14], lm[16])) / 2;
+    const legLength = (distance(lm[23], lm[25]) + distance(lm[25], lm[27]) + distance(lm[24], lm[26]) + distance(lm[26], lm[28])) / 2;
+
+    const shoulderHipRatio = shoulderWidth / Math.max(hipWidth, 0.0001);
+    const robustness = ((shoulderWidth + hipWidth) / 2) / trunkLength;
+    const limbToTrunkRatio = (armLength + legLength) / (2 * trunkLength);
+
+    let ectoScore = 0;
+    let mesoScore = 0;
+    let endoScore = 0;
+
+    if (limbToTrunkRatio > 1.48) ectoScore += 2;
+    if (limbToTrunkRatio >= 1.34 && limbToTrunkRatio <= 1.48) mesoScore += 2;
+    if (limbToTrunkRatio < 1.34) endoScore += 2;
+
+    if (robustness < 0.85) ectoScore += 2;
+    if (robustness >= 0.85 && robustness <= 1.0) mesoScore += 2;
+    if (robustness > 1.0) endoScore += 2;
+
+    if (shoulderHipRatio > 1.1) mesoScore += 2;
+    if (shoulderHipRatio >= 0.98 && shoulderHipRatio <= 1.1) ectoScore += 1;
+    if (shoulderHipRatio < 0.98) endoScore += 2;
+
+    if (mesoScore >= ectoScore && mesoScore >= endoScore) return 'mesomorfo';
+    if (ectoScore >= mesoScore && ectoScore >= endoScore) return 'ectomorfo';
+    return 'endomorfo';
+  }, []);
+
+  const emitBiotypeMonitoringEvent = useCallback((biotype: string, sampleCount: number) => {
+    if (typeof window === 'undefined') return;
+
+    window.dispatchEvent(
+      new CustomEvent('biotype-monitoring', {
+        detail: {
+          biotype,
+          sampleCount,
+          timestamp: new Date().toISOString()
+        }
+      })
+    );
+  }, []);
+
+  const updateEstimatedBiotype = useCallback((detectedType: 'ectomorfo' | 'mesomorfo' | 'endomorfo' | null) => {
+    if (!detectedType) return;
+
+    const votes = biotypeVotesRef.current;
+    votes.push(detectedType);
+    if (votes.length > 24) {
+      votes.shift();
+    }
+
+    const tally = {
+      ectomorfo: votes.filter(v => v === 'ectomorfo').length,
+      mesomorfo: votes.filter(v => v === 'mesomorfo').length,
+      endomorfo: votes.filter(v => v === 'endomorfo').length
+    };
+
+    const sorted = Object.entries(tally).sort((a, b) => b[1] - a[1]) as Array<['ectomorfo' | 'mesomorfo' | 'endomorfo', number]>;
+    const [primary, primaryVotes] = sorted[0];
+    const [secondary, secondaryVotes] = sorted[1];
+    const totalVotes = votes.length;
+
+    if (totalVotes < 6) {
+      const message = 'Coletando proporções corporais...';
+      setEstimatedBiotype(message);
+      emitBiotypeMonitoringEvent(message, totalVotes);
+      return;
+    }
+
+    if (primaryVotes - secondaryVotes <= 2) {
+      const hybrid = `${primary}-${secondary}`;
+      const message = `Híbrido (${hybrid}) - predominância de ${primary}`;
+      setEstimatedBiotype(message);
+      emitBiotypeMonitoringEvent(message, totalVotes);
+      return;
+    }
+
+    const message = `${primary} (estimativa por câmera)`;
+    setEstimatedBiotype(message);
+    emitBiotypeMonitoringEvent(message, totalVotes);
+  }, [emitBiotypeMonitoringEvent]);
 
   // Função para desenhar o simetrógrafo (grade)
   const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
@@ -438,7 +548,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
 
       case 'lado-direito':
       case 'lado-esquerdo':
-        // Plano sagital: cabeça/cervical, coluna torácica, pelve, joelho e tornozelo.
+        // Plano sagital: cabeça, ombro, coluna torácica, pelve, joelho e tornozelo.
         const orelhaIndex = position === 'lado-direito' ? 8 : 7;
         const ombroIndex = position === 'lado-direito' ? 12 : 11;
         const quadrilIndex = position === 'lado-direito' ? 24 : 23;
@@ -446,12 +556,15 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
         const tornozeloIndex = position === 'lado-direito' ? 28 : 27;
         const peIndex = position === 'lado-direito' ? 32 : 31;
 
-        const protrusaoCervical = percentual(lm[orelhaIndex].x - lm[ombroIndex].x);
-        analysis.cervical = protrusaoCervical > 5.2
-          ? `Protrusão de cabeça (${protrusaoCervical.toFixed(1)}%)`
-          : 'Alinhamento normal';
+        const protrusaoCabeca = percentual(lm[orelhaIndex].x - lm[ombroIndex].x);
+        analysis.cabeca = protrusaoCabeca > 5.2
+          ? `Protrusão de cabeça (${protrusaoCabeca.toFixed(1)}%)`
+          : 'Cabeça alinhada';
 
-        analysis.cabeca = analysis.cervical;
+        const anteriorizacaoOmbro = percentual(lm[ombroIndex].x - lm[quadrilIndex].x);
+        analysis.ombro = anteriorizacaoOmbro > 5.2
+          ? `Anteriorização de ombro (${anteriorizacaoOmbro.toFixed(1)}%)`
+          : 'Ombro alinhado';
 
         const anguloToracico = calcAngle(lm[orelhaIndex], lm[ombroIndex], lm[quadrilIndex]);
         if (anguloToracico < 142) {
@@ -566,6 +679,9 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
 
     const lm = results.poseLandmarks;
 
+    const detectedType = estimateSomatotype(lm);
+    updateEstimatedBiotype(detectedType);
+
     // Limpar e desenhar frame
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -589,7 +705,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
     }
 
     ctx.restore();
-  }, [currentPosition, analyzePostureByPosition]);
+  }, [currentPosition, analyzePostureByPosition, estimateSomatotype, updateEstimatedBiotype]);
 
   // Inicializar MediaPipe
   useEffect(() => {
@@ -744,6 +860,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
     videoRef,
     canvasRef,
     currentAnalysis,
+    estimatedBiotype,
     currentImageBase64,
     isInitialized,
     permissionError,
