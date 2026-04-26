@@ -33,7 +33,7 @@ export const SessionProgress: React.FC<SessionProgressProps> = ({
     }
   };
 
-  const stepLabels = ['Vista Frontal', 'Perfil Direito', 'Perfil Esquerdo', 'Vista Posterior'];
+  const stepLabels = ['Vista Frontal', 'Perfil Direito', 'Perfil Esquerdo', 'Vista Posterior', 'Take dos Pés'];
 
   return (
     <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
@@ -105,7 +105,7 @@ export const SessionProgress: React.FC<SessionProgressProps> = ({
             </span>
           </div>
           <p className="text-sm text-green-700 mt-1">
-            Todas as 4 posições foram capturadas. Você pode gerar o relatório final.
+            Todas as 5 posições foram capturadas. Você pode gerar o relatório final.
           </p>
         </div>
       )}

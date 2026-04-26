@@ -44,6 +44,13 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ analysis, currentPos
           { label: 'Tornozelos', value: analysis.tornozelo },
           { label: 'Pés', value: analysis.pes }
         ];
+      case 'take-pe':
+        return [
+          { label: 'Joelhos', value: analysis.joelho },
+          { label: 'Tornozelos', value: analysis.tornozelo },
+          { label: 'Pés/Apoio Plantar', value: analysis.pes },
+          { label: 'Relação Pé-Tornozelo-Joelho', value: analysis.relacaoPeTornozeloJoelho }
+        ];
       default:
         return [];
     }
@@ -54,7 +61,8 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ analysis, currentPos
     'frente': 'Vista Frontal',
     'lado-direito': 'Perfil Direito',
     'lado-esquerdo': 'Perfil Esquerdo',
-    'costas': 'Vista Posterior'
+    'costas': 'Vista Posterior',
+    'take-pe': 'Take dos Pés'
   };
 
   return (

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ResultsPanel } from './ResultsPanel';
 import { SessionProgress } from './SessionProgress';
 import { usePDFGenerator } from '../hooks/usePDFGenerator';
@@ -233,6 +233,71 @@ export const Sidebar: React.FC<SidebarProps> = ({
     : [];
 
   const { generateConsolidatedReport } = usePDFGenerator();
+
+  const laudoPisada = useMemo(() => {
+    const takePeCapture = sessionData.captures.find((capture) => capture.position === 'take-pe');
+    if (!takePeCapture) {
+      return {
+        disponivel: false,
+        gravidade: 'indisponivel' as const,
+        conclusao: 'Take dos pés ainda não disponível para emissão do laudo da pisada.',
+        achados: [] as Array<{ titulo: string; valor: string }>
+      };
+    }
+
+    const itens = [
+      { titulo: 'Joelho', valor: takePeCapture.analysis.joelho ?? '' },
+      { titulo: 'Tornozelo/Retropé', valor: takePeCapture.analysis.tornozelo ?? '' },
+      { titulo: 'Apoio Plantar', valor: takePeCapture.analysis.pes ?? '' },
+      { titulo: 'Relação Pé-Tornozelo-Joelho', valor: takePeCapture.analysis.relacaoPeTornozeloJoelho ?? '' }
+    ];
+
+    const achados = itens.filter((item) => {
+      const normalized = item.valor.trim().toLowerCase();
+      if (!normalized) return false;
+      if (normalized === 'normal') return false;
+      if (normalized.includes('aguardando detecção')) return false;
+      if (normalized.includes('alinhado')) return false;
+      if (normalized.includes('simétrico')) return false;
+      if (normalized.includes('estável para apoio e propulsão')) return false;
+      return true;
+    });
+
+    const severityScore = achados.reduce((score, item) => {
+      const normalized = item.valor.toLowerCase();
+      let nextScore = score;
+
+      if (normalized.includes('desalinhamento funcional') || normalized.includes('fora do eixo')) {
+        nextScore += 2;
+      }
+      if (normalized.includes('padrão rígido') || normalized.includes('compensação distal')) {
+        nextScore += 1;
+      }
+      if (normalized.includes('desvio') || normalized.includes('assimetria')) {
+        nextScore += 1;
+      }
+      if (normalized.includes('prona') || normalized.includes('supina')) {
+        nextScore += 1;
+      }
+
+      return nextScore;
+    }, 0);
+
+    const gravidade = achados.length === 0
+      ? 'leve'
+      : severityScore >= 4
+        ? 'importante'
+        : 'moderada';
+
+    return {
+      disponivel: true,
+      gravidade,
+      conclusao: achados.length
+        ? `Foram observados ${achados.length} achado(s) relevantes na avaliação da pisada.`
+        : 'Sem alterações relevantes na avaliação estática da pisada nesta coleta.',
+      achados
+    };
+  }, [sessionData.captures]);
 
   useEffect(() => {
     const hasSuggestion =
@@ -602,6 +667,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </li>
               ))}
             </ul>
+          </div>
+
+          <div className="mt-3 border-t border-blue-200 pt-3">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <p className="text-sm font-medium text-blue-800">Laudo da Pisada</p>
+              <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                laudoPisada.gravidade === 'importante'
+                  ? 'bg-red-100 text-red-800'
+                  : laudoPisada.gravidade === 'moderada'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : laudoPisada.gravidade === 'leve'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-gray-100 text-gray-700'
+              }`}>
+                Gravidade: {
+                  laudoPisada.gravidade === 'indisponivel'
+                    ? 'Indisponível'
+                    : laudoPisada.gravidade.charAt(0).toUpperCase() + laudoPisada.gravidade.slice(1)
+                }
+              </span>
+            </div>
+            <p className="text-xs text-blue-700 mb-2">{laudoPisada.conclusao}</p>
+
+            {laudoPisada.disponivel && laudoPisada.achados.length > 0 && (
+              <ul className="text-xs text-blue-700 space-y-1">
+                {laudoPisada.achados.map((achado) => (
+                  <li key={achado.titulo} className="flex items-start gap-1">
+                    <span className="text-blue-500 mt-0.5">•</span>
+                    <span><strong>{achado.titulo}:</strong> {achado.valor}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {sessionData.consolidatedAnalysis.condutasEspecificas.length > 0 && (

@@ -12,21 +12,24 @@ const ANATOMICAL_POSITIONS: AnatomicalPosition[] = [
   'frente', 
   'lado-direito', 
   'lado-esquerdo', 
-  'costas'
+  'costas',
+  'take-pe'
 ];
 
 const POSITION_LABELS = {
   'frente': 'Vista Frontal',
   'lado-direito': 'Perfil Direito', 
   'lado-esquerdo': 'Perfil Esquerdo',
-  'costas': 'Vista Posterior'
+  'costas': 'Vista Posterior',
+  'take-pe': 'Take dos Pés'
 };
 
 const POSITION_INSTRUCTIONS = {
   'frente': 'Posicione o paciente de frente para a câmera, braços ao lado do corpo',
   'lado-direito': 'Posicione o paciente de perfil direito, mostrando o lado direito do corpo',
   'lado-esquerdo': 'Posicione o paciente de perfil esquerdo, mostrando o lado esquerdo do corpo', 
-  'costas': 'Posicione o paciente de costas para a câmera, braços ao lado do corpo'
+  'costas': 'Posicione o paciente de costas para a câmera, braços ao lado do corpo',
+  'take-pe': 'Aproxime a câmera dos membros inferiores para avaliar joelho, tornozelo e alinhamento dos pés'
 };
 
 type IssueKey =
@@ -178,6 +181,8 @@ export const useSessionManager = () => {
         ? 'vista frontal'
         : position === 'costas'
           ? 'vista posterior'
+          : position === 'take-pe'
+            ? 'take dos pés'
           : `perfil ${position === 'lado-direito' ? 'direito' : 'esquerdo'}`;
 
     captures.forEach(capture => {
@@ -205,7 +210,8 @@ export const useSessionManager = () => {
       }
 
       if (hasAnyTerm(analysis.tornozelo, ['desalinhamento', 'restrição', 'valgismo', 'varismo']) ||
-          hasAnyTerm(analysis.pes, ['assimetria', 'rotação', 'apoio plantar'])) {
+          hasAnyTerm(analysis.pes, ['assimetria', 'rotação', 'apoio plantar', 'pronação', 'supinação']) ||
+          hasAnyTerm(analysis.relacaoPeTornozeloJoelho, ['desalinhamento', 'pronação', 'supinação', 'instabilidade'])) {
         registerIssue(`Alteração de tornozelos/pés observada na ${describePosition(position)}`, 2, 'tornozelos-pes');
       }
     });

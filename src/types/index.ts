@@ -24,6 +24,7 @@ export interface PostureAnalysis {
   membrosSuperiores?: string;
   membrosInferiores?: string;
   pes?: string;
+  relacaoPeTornozeloJoelho?: string;
 }
 
 export interface CaptureData {
@@ -33,7 +34,7 @@ export interface CaptureData {
   timestamp: Date;
 }
 
-export type AnatomicalPosition = 'frente' | 'lado-direito' | 'lado-esquerdo' | 'costas';
+export type AnatomicalPosition = 'frente' | 'lado-direito' | 'lado-esquerdo' | 'costas' | 'take-pe';
 
 export interface SessionData {
   captures: CaptureData[];

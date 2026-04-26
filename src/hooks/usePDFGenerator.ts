@@ -245,6 +245,107 @@ export const usePDFGenerator = () => {
       }
     }
 
+    // Laudo dedicado da pisada
+    const footCapture = sessionData.captures.find((capture) => capture.position === 'take-pe');
+    const isRelevantFinding = (value?: string): boolean => {
+      if (!value) return false;
+      const normalized = value.trim().toLowerCase();
+      if (!normalized) return false;
+      if (normalized === 'normal') return false;
+      if (normalized.includes('aguardando detecção')) return false;
+      if (normalized.includes('estável para apoio e propulsão')) return false;
+      if (normalized.includes('alinhado')) return false;
+      if (normalized.includes('simétrico')) return false;
+      return true;
+    };
+
+    const footFindings = footCapture
+      ? [
+          { label: 'Joelho', value: footCapture.analysis.joelho },
+          { label: 'Tornozelo/Retropé', value: footCapture.analysis.tornozelo },
+          { label: 'Apoio Plantar', value: footCapture.analysis.pes },
+          { label: 'Relação Pé-Tornozelo-Joelho', value: footCapture.analysis.relacaoPeTornozeloJoelho }
+        ].filter((item) => isRelevantFinding(item.value))
+      : [];
+
+    const footSeverityScore = footFindings.reduce((score, finding) => {
+      const normalized = finding.value?.toLowerCase() ?? '';
+      let nextScore = score;
+
+      if (normalized.includes('desalinhamento funcional') || normalized.includes('fora do eixo')) {
+        nextScore += 2;
+      }
+      if (normalized.includes('padrão rígido') || normalized.includes('compensação distal')) {
+        nextScore += 1;
+      }
+      if (normalized.includes('desvio') || normalized.includes('assimetria')) {
+        nextScore += 1;
+      }
+      if (normalized.includes('prona') || normalized.includes('supina')) {
+        nextScore += 1;
+      }
+
+      return nextScore;
+    }, 0);
+
+    const footSeverity = !footCapture
+      ? 'Indisponível'
+      : footFindings.length === 0
+        ? 'Leve'
+        : footSeverityScore >= 4
+          ? 'Importante'
+          : 'Moderada';
+
+    const pisadaConclusao = !footCapture
+      ? 'Não foi possível emitir laudo da pisada, pois o take dos pés não foi capturado.'
+      : footFindings.length === 0
+        ? 'Sem alterações relevantes no alinhamento funcional da pisada no momento da avaliação estática.'
+        : `Foram identificados ${footFindings.length} achado(s) relevantes relacionados à mecânica da pisada.`;
+
+    ensureSpace(44);
+    doc.setFont('helvetica', 'bold');
+    doc.text('LAUDO DA AVALIAÇÃO DA PISADA:', 20, currentY);
+    currentY += 8;
+    doc.setFont('helvetica', 'normal');
+
+    const conclusaoLines = doc.splitTextToSize(`Conclusão: ${pisadaConclusao}`, 170);
+    doc.text(conclusaoLines, 20, currentY);
+    currentY += conclusaoLines.length * 5 + 2;
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Gravidade da Pisada: ${footSeverity}`, 20, currentY);
+    doc.setFont('helvetica', 'normal');
+    currentY += 7;
+
+    if (footFindings.length > 0) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Achados da pisada:', 20, currentY);
+      currentY += 6;
+      doc.setFont('helvetica', 'normal');
+
+      footFindings.forEach((finding) => {
+        ensureSpace(12);
+        const lines = doc.splitTextToSize(`• ${finding.label}: ${finding.value}`, 165);
+        doc.text(lines, 24, currentY);
+        currentY += lines.length * 5;
+      });
+
+      currentY += 4;
+      doc.setFont('helvetica', 'bold');
+      doc.text('Conduta sugerida para pisada:', 20, currentY);
+      currentY += 6;
+      doc.setFont('helvetica', 'normal');
+
+      const condutaPisada = doc.splitTextToSize(
+        'Priorizar exercícios de controle de arco plantar, estabilidade de tornozelo e alinhamento de joelho em cadeia cinética fechada, com reavaliação funcional periódica.',
+        170
+      );
+      doc.text(condutaPisada, 20, currentY);
+      currentY += condutaPisada.length * 5 + 4;
+    }
+
+    currentY += 4;
+
     // Detalhes por posição com imagem correspondente
     doc.setFont('helvetica', 'bold');
     doc.text('ANÁLISE DETALHADA POR POSIÇÃO (COM IMAGENS):', 20, currentY);
@@ -254,7 +355,8 @@ export const usePDFGenerator = () => {
       'frente': 'Vista Frontal',
       'lado-direito': 'Perfil Direito',
       'lado-esquerdo': 'Perfil Esquerdo',
-      'costas': 'Vista Posterior'
+      'costas': 'Vista Posterior',
+      'take-pe': 'Take dos Pés'
     };
 
     sessionData.captures.forEach((capture) => {

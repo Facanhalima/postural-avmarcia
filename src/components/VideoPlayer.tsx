@@ -30,7 +30,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     'frente': 'Posicione o paciente de frente para a câmera',
     'lado-direito': 'Posicione o paciente de perfil direito',
     'lado-esquerdo': 'Posicione o paciente de perfil esquerdo',
-    'costas': 'Posicione o paciente de costas para a câmera'
+    'costas': 'Posicione o paciente de costas para a câmera',
+    'take-pe': 'Aproxime para captar joelho, tornozelo e pés na mesma imagem'
   };
 
   return (
@@ -103,7 +104,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
                 : 'bg-gray-400 cursor-not-allowed'
             }`}
           >
-            {isInitialized ? 'Capturar Posição' : 'Aguarde...'}
+            {isInitialized ? (currentPosition === 'take-pe' ? 'Capturar Take do Pé' : 'Capturar Posição') : 'Aguarde...'}
           </button>
 
           <button

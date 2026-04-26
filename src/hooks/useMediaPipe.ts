@@ -296,7 +296,8 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
     torax: 'Aguardando detecção...',
     membrosSuperiores: 'Aguardando detecção...',
     membrosInferiores: 'Aguardando detecção...',
-    pes: 'Aguardando detecção...'
+    pes: 'Aguardando detecção...',
+    relacaoPeTornozeloJoelho: 'Aguardando detecção...'
   });
   const [isInitialized, setIsInitialized] = useState(false);
   const [permissionError, setPermissionError] = useState<string>('');
@@ -471,7 +472,8 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
       torax: 'Normal',
       membrosSuperiores: 'Normal',
       membrosInferiores: 'Normal',
-      pes: 'Normal'
+      pes: 'Normal',
+      relacaoPeTornozeloJoelho: 'Normal'
     };
 
     switch (position) {
@@ -663,6 +665,51 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
 
         analysis.membrosInferiores = analysis.joelho;
         analysis.quadril = analysis.pelve;
+        break;
+
+      case 'take-pe':
+        // Take específico para pisada: foco em eixo joelho-tornozelo-pé e retropé.
+        const centroJoelhosX = (lm[25].x + lm[26].x) / 2;
+        const centroTornozelosX = (lm[27].x + lm[28].x) / 2;
+        const centroAntepeX = (lm[31].x + lm[32].x) / 2;
+
+        const desvioJoelhoSobrePe = percentual(centroJoelhosX - centroAntepeX);
+        const desvioTornozeloSobrePe = percentual(centroTornozelosX - centroAntepeX);
+
+        const anguloTibiotarsicoDireito = calcAngle(lm[26], lm[28], lm[32]);
+        const anguloTibiotarsicoEsquerdo = calcAngle(lm[25], lm[27], lm[31]);
+        const mediaAnguloTibiotarsico = (anguloTibiotarsicoDireito + anguloTibiotarsicoEsquerdo) / 2;
+
+        const desvioRetropeDireito = percentual(lm[30].x - lm[28].x);
+        const desvioRetropeEsquerdo = percentual(lm[29].x - lm[27].x);
+        const mediaRetrope = (desvioRetropeDireito + desvioRetropeEsquerdo) / 2;
+
+        const assimetriaArcoPlantar = percentual((lm[31].x - lm[29].x) - (lm[32].x - lm[30].x));
+
+        analysis.joelho = desvioJoelhoSobrePe > 4.2
+          ? `Joelho fora do eixo do pé (${desvioJoelhoSobrePe.toFixed(1)}%)`
+          : 'Joelho centrado sobre o pé';
+
+        analysis.tornozelo = mediaRetrope > 3.2
+          ? `Retropé com desvio (tendência a pronacao/supinacao) (${mediaRetrope.toFixed(1)}%)`
+          : 'Retropé alinhado';
+
+        analysis.pes = assimetriaArcoPlantar > 4.4
+          ? `Assimetria de apoio plantar (${assimetriaArcoPlantar.toFixed(1)}%)`
+          : 'Apoio plantar simétrico';
+
+        if (mediaAnguloTibiotarsico < 82) {
+          analysis.relacaoPeTornozeloJoelho = `Relação pé-tornozelo-joelho com padrão rígido (${mediaAnguloTibiotarsico.toFixed(1)}°)`;
+        } else if (mediaAnguloTibiotarsico > 112) {
+          analysis.relacaoPeTornozeloJoelho = `Relação pé-tornozelo-joelho com compensação distal (${mediaAnguloTibiotarsico.toFixed(1)}°)`;
+        } else if (desvioJoelhoSobrePe > 4.2 || desvioTornozeloSobrePe > 3.8 || mediaRetrope > 3.2) {
+          analysis.relacaoPeTornozeloJoelho = `Desalinhamento funcional da cadeia joelho-tornozelo-pé (K-F ${desvioJoelhoSobrePe.toFixed(1)}% | A-F ${desvioTornozeloSobrePe.toFixed(1)}%)`;
+        } else {
+          analysis.relacaoPeTornozeloJoelho = 'Relação pé-tornozelo-joelho estável para apoio e propulsão';
+        }
+
+        analysis.membrosInferiores = analysis.relacaoPeTornozeloJoelho;
+        analysis.quadril = 'Foco da tomada: segmento distal';
         break;
     }
 
