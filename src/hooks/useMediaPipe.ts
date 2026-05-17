@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import type { PostureAnalysis, Landmark, AnatomicalPosition } from '../types';
+import type { CaptureGuidance, PostureAnalysis, Landmark, AnatomicalPosition } from '../types';
 
 type CameraFacingMode = 'user' | 'environment';
 
@@ -304,6 +304,13 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
   const [currentImageBase64, setCurrentImageBase64] = useState<string>('');
   const [videoDimensions, setVideoDimensions] = useState({ width: 640, height: 480 });
   const [estimatedBiotype, setEstimatedBiotype] = useState<string>('Aguardando leitura frontal...');
+  const [captureGuidance, setCaptureGuidance] = useState<CaptureGuidance>({
+    canCapture: false,
+    score: 0,
+    status: 'adjust',
+    title: 'Aguardando enquadramento',
+    details: ['Centralize o paciente e aguarde a leitura dos pontos anatômicos.']
+  });
   const poseConnectionsRef = useRef<unknown>([]);
   const drawConnectorsRef = useRef<DrawConnectorsFn | null>(null);
   const drawLandmarksRef = useRef<DrawLandmarksFn | null>(null);
@@ -338,6 +345,116 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
       y: (p1.y + p2.y) / 2
     };
   };
+
+  const lineAngle = (p1: Landmark, p2: Landmark): number => {
+    return Math.atan2(p2.y - p1.y, p2.x - p1.x) * (180 / Math.PI);
+  };
+
+  const visibilityScore = (lm: Landmark | undefined): number => lm?.visibility ?? 1;
+
+  const buildCaptureGuidance = useCallback((lm: Landmark[], position: AnatomicalPosition): CaptureGuidance => {
+    const details: string[] = [];
+    let score = 100;
+
+    const penalize = (amount: number, message: string) => {
+      score -= amount;
+      if (!details.includes(message)) {
+        details.push(message);
+      }
+    };
+
+    const coreIndices = position === 'take-pe'
+      ? [23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
+      : [0, 7, 8, 11, 12, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+
+    const visibleCore = coreIndices.filter((index) => lm[index] && visibilityScore(lm[index]) >= 0.55).length;
+    if (visibleCore < Math.ceil(coreIndices.length * 0.75)) {
+      penalize(35, 'Mantenha os pontos anatômicos principais visíveis na imagem.');
+    }
+
+    const shoulderLineAngle = lm[11] && lm[12] ? Math.abs(lineAngle(lm[11], lm[12])) : 0;
+    const hipLineAngle = lm[23] && lm[24] ? Math.abs(lineAngle(lm[23], lm[24])) : 0;
+    if (shoulderLineAngle > 7 || hipLineAngle > 7) {
+      penalize(18, 'Nivele a câmera para evitar inclinação lateral da imagem.');
+    }
+
+    const torsoCenterX = lm[11] && lm[12] && lm[23] && lm[24]
+      ? (lm[11].x + lm[12].x + lm[23].x + lm[24].x) / 4
+      : 0.5;
+
+    const footCenterX = lm[27] && lm[28]
+      ? (lm[27].x + lm[28].x) / 2
+      : torsoCenterX;
+
+    const referenceCenterX = position === 'take-pe' ? footCenterX : torsoCenterX;
+    if (Math.abs(referenceCenterX - 0.5) > 0.12) {
+      penalize(12, 'Centralize melhor o corpo no quadro.');
+    }
+
+    const relevantPoints = coreIndices
+      .map((index) => lm[index])
+      .filter((point): point is Landmark => Boolean(point));
+
+    const minY = Math.min(...relevantPoints.map((point) => point.y));
+    const maxY = Math.max(...relevantPoints.map((point) => point.y));
+    const coverage = maxY - minY;
+
+    if (position === 'take-pe') {
+      if (coverage < 0.36) {
+        penalize(18, 'Aproxime a câmera para enquadrar joelhos, tornozelos e pés com mais detalhe.');
+      }
+      if (coverage > 0.9) {
+        penalize(15, 'Afaste um pouco a câmera para evitar corte dos pés ou dos joelhos.');
+      }
+
+      const ankleSpacing = lm[27] && lm[28] ? Math.abs(lm[27].x - lm[28].x) : 0;
+      if (ankleSpacing < 0.1) {
+        penalize(10, 'Aumente levemente a base de apoio para evidenciar os dois pés.');
+      }
+
+      const rightFootAngle = lm[30] && lm[32] ? Math.abs(lineAngle(lm[30], lm[32])) : 0;
+      const leftFootAngle = lm[29] && lm[31] ? Math.abs(lineAngle(lm[29], lm[31])) : 0;
+      if (Math.max(rightFootAngle, leftFootAngle) > 20) {
+        penalize(10, 'Mantenha os pés mais paralelos para padronizar a leitura da pisada.');
+      }
+    } else {
+      if (coverage < 0.65) {
+        penalize(12, 'Inclua mais do corpo no enquadramento, preferencialmente da cabeça aos pés.');
+      }
+      if (coverage > 0.97) {
+        penalize(10, 'Diminua o zoom ou afaste um pouco a câmera para evitar cortes.');
+      }
+    }
+
+    if (score < 0) score = 0;
+
+    const status: CaptureGuidance['status'] = score >= 78 ? 'ok' : score >= 60 ? 'attention' : 'adjust';
+    const title = position === 'take-pe'
+      ? status === 'ok'
+        ? 'Enquadramento da pisada pronto'
+        : 'Ajuste o take dos pés'
+      : status === 'ok'
+        ? 'Enquadramento pronto'
+        : 'Ajuste o enquadramento';
+
+    const defaultDetails = position === 'take-pe'
+      ? [
+          'Mantenha joelhos, tornozelos e pés visíveis na mesma tomada.',
+          'Procure apoiar o peso de forma equilibrada nos dois membros.'
+        ]
+      : [
+          'Mantenha a postura neutra e o paciente centralizado no quadro.',
+          'Evite inclinar a câmera para não distorcer os eixos corporais.'
+        ];
+
+    return {
+      canCapture: score >= 60,
+      score,
+      status,
+      title,
+      details: details.length > 0 ? details : defaultDetails
+    };
+  }, []);
 
   const estimateSomatotype = useCallback((lm: Landmark[]): 'ectomorfo' | 'mesomorfo' | 'endomorfo' | null => {
     if (!lm[11] || !lm[12] || !lm[23] || !lm[24] || !lm[13] || !lm[14] || !lm[15] || !lm[16] || !lm[25] || !lm[26] || !lm[27] || !lm[28]) {
@@ -680,29 +797,40 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
         const anguloTibiotarsicoEsquerdo = calcAngle(lm[25], lm[27], lm[31]);
         const mediaAnguloTibiotarsico = (anguloTibiotarsicoDireito + anguloTibiotarsicoEsquerdo) / 2;
 
-        const desvioRetropeDireito = percentual(lm[30].x - lm[28].x);
-        const desvioRetropeEsquerdo = percentual(lm[29].x - lm[27].x);
+        const desvioRetropeDireito = lm[30].x - lm[28].x;
+        const desvioRetropeEsquerdo = lm[29].x - lm[27].x;
         const mediaRetrope = (desvioRetropeDireito + desvioRetropeEsquerdo) / 2;
 
         const assimetriaArcoPlantar = percentual((lm[31].x - lm[29].x) - (lm[32].x - lm[30].x));
+        const aberturaDireita = lm[28].x - lm[30].x;
+        const aberturaEsquerda = lm[31].x - lm[29].x;
+        const aberturaMediaPes = (aberturaDireita + aberturaEsquerda) / 2;
+        const tendenciaPronacao = mediaRetrope > 0.015 && aberturaMediaPes > 0.02;
+        const tendenciaSupinacao = mediaRetrope < -0.015 && aberturaMediaPes < -0.01;
 
         analysis.joelho = desvioJoelhoSobrePe > 4.2
           ? `Joelho fora do eixo do pé (${desvioJoelhoSobrePe.toFixed(1)}%)`
           : 'Joelho centrado sobre o pé';
 
-        analysis.tornozelo = mediaRetrope > 3.2
-          ? `Retropé com desvio (tendência a pronacao/supinacao) (${mediaRetrope.toFixed(1)}%)`
-          : 'Retropé alinhado';
+        analysis.tornozelo = mediaRetrope > 0.018
+          ? `Retropé em valgo com tendência à pronação (${(mediaRetrope * 100).toFixed(1)}%)`
+          : mediaRetrope < -0.018
+            ? `Retropé em varo com tendência à supinação (${Math.abs(mediaRetrope * 100).toFixed(1)}%)`
+            : 'Retropé alinhado';
 
-        analysis.pes = assimetriaArcoPlantar > 4.4
-          ? `Assimetria de apoio plantar (${assimetriaArcoPlantar.toFixed(1)}%)`
-          : 'Apoio plantar simétrico';
+        analysis.pes = tendenciaPronacao
+          ? `Pisada com tendência pronada e apoio medial aumentado (${Math.abs(aberturaMediaPes * 100).toFixed(1)}%)`
+          : tendenciaSupinacao
+            ? `Pisada com tendência supinada e apoio lateral aumentado (${Math.abs(aberturaMediaPes * 100).toFixed(1)}%)`
+            : assimetriaArcoPlantar > 4.4
+              ? `Assimetria de apoio plantar (${assimetriaArcoPlantar.toFixed(1)}%)`
+              : 'Pisada mais neutra com apoio plantar simétrico';
 
         if (mediaAnguloTibiotarsico < 82) {
           analysis.relacaoPeTornozeloJoelho = `Relação pé-tornozelo-joelho com padrão rígido (${mediaAnguloTibiotarsico.toFixed(1)}°)`;
         } else if (mediaAnguloTibiotarsico > 112) {
           analysis.relacaoPeTornozeloJoelho = `Relação pé-tornozelo-joelho com compensação distal (${mediaAnguloTibiotarsico.toFixed(1)}°)`;
-        } else if (desvioJoelhoSobrePe > 4.2 || desvioTornozeloSobrePe > 3.8 || mediaRetrope > 3.2) {
+        } else if (desvioJoelhoSobrePe > 4.2 || desvioTornozeloSobrePe > 3.8 || Math.abs(mediaRetrope) > 0.018) {
           analysis.relacaoPeTornozeloJoelho = `Desalinhamento funcional da cadeia joelho-tornozelo-pé (K-F ${desvioJoelhoSobrePe.toFixed(1)}% | A-F ${desvioTornozeloSobrePe.toFixed(1)}%)`;
         } else {
           analysis.relacaoPeTornozeloJoelho = 'Relação pé-tornozelo-joelho estável para apoio e propulsão';
@@ -728,6 +856,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
 
     const detectedType = estimateSomatotype(lm);
     updateEstimatedBiotype(detectedType);
+    setCaptureGuidance(buildCaptureGuidance(lm, currentPosition));
 
     // Limpar e desenhar frame
     ctx.save();
@@ -752,7 +881,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
     }
 
     ctx.restore();
-  }, [currentPosition, analyzePostureByPosition, estimateSomatotype, updateEstimatedBiotype]);
+  }, [currentPosition, analyzePostureByPosition, buildCaptureGuidance, estimateSomatotype, updateEstimatedBiotype]);
 
   // Inicializar MediaPipe
   useEffect(() => {
@@ -908,6 +1037,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
     canvasRef,
     currentAnalysis,
     estimatedBiotype,
+    captureGuidance,
     currentImageBase64,
     isInitialized,
     permissionError,

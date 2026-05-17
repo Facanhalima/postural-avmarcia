@@ -23,6 +23,7 @@ function App() {
     canvasRef, 
     currentAnalysis, 
     estimatedBiotype,
+    captureGuidance,
     currentImageBase64, 
     isInitialized,
     permissionError,
@@ -57,8 +58,10 @@ function App() {
             canvasRef={canvasRef} 
             isInitialized={isInitialized}
             currentPosition={sessionData.currentPosition}
+            currentInstruction={getCurrentInstruction()}
+            captureGuidance={captureGuidance}
             onCapture={handleCapture}
-            canCapture={isInitialized && !sessionData.isComplete}
+            canCapture={isInitialized && !sessionData.isComplete && captureGuidance.canCapture}
             permissionError={permissionError}
             cameraFacingMode={cameraFacingMode}
             onToggleCamera={handleToggleCamera}

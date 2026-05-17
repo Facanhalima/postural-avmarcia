@@ -1,11 +1,13 @@
 import React from 'react';
-import type { AnatomicalPosition } from '../types';
+import type { AnatomicalPosition, CaptureGuidance } from '../types';
 
 interface VideoPlayerProps {
   videoRef: React.RefObject<HTMLVideoElement>;
   canvasRef: React.RefObject<HTMLCanvasElement>;
   isInitialized: boolean;
   currentPosition: AnatomicalPosition;
+  currentInstruction: string;
+  captureGuidance: CaptureGuidance;
   onCapture: () => void;
   canCapture: boolean;
   permissionError?: string;
@@ -19,6 +21,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   canvasRef,
   isInitialized,
   currentPosition,
+  currentInstruction,
+  captureGuidance,
   onCapture,
   canCapture,
   permissionError,
@@ -26,13 +30,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onToggleCamera,
   videoDimensions
 }) => {
-  const positionInstructions = {
-    'frente': 'Posicione o paciente de frente para a câmera',
-    'lado-direito': 'Posicione o paciente de perfil direito',
-    'lado-esquerdo': 'Posicione o paciente de perfil esquerdo',
-    'costas': 'Posicione o paciente de costas para a câmera',
-    'take-pe': 'Aproxime para captar joelho, tornozelo e pés na mesma imagem'
-  };
+  const guidanceTone = {
+    ok: 'bg-emerald-50 border-emerald-200 text-emerald-900',
+    attention: 'bg-amber-50 border-amber-200 text-amber-900',
+    adjust: 'bg-rose-50 border-rose-200 text-rose-900'
+  }[captureGuidance.status];
 
   return (
     <div className="w-full flex flex-col items-center">
@@ -88,11 +90,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       {/* Instruções e botão de captura */}
       <div className="mt-4 text-center max-w-2xl px-2 sm:px-0 w-full">
         <p className="text-gray-700 mb-3 text-sm sm:text-base">
-          <span className="font-medium">Instrução:</span> {positionInstructions[currentPosition]}
+          <span className="font-medium">Instrução:</span> {currentInstruction}
         </p>
         <p className="text-xs sm:text-sm text-gray-600 mb-4">
           Use o simetrógrafo (grade azul) para referência de alinhamento postural
         </p>
+
+        <div className={`rounded-xl border p-3 text-left mb-4 ${guidanceTone}`}>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <p className="font-semibold text-sm">{captureGuidance.title}</p>
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white/70">
+              Qualidade {captureGuidance.score}/100
+            </span>
+          </div>
+          <ul className="space-y-1 text-xs sm:text-sm">
+            {captureGuidance.details.map((detail) => (
+              <li key={detail} className="flex items-start gap-2">
+                <span className="mt-1 text-current">•</span>
+                <span>{detail}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
           <button

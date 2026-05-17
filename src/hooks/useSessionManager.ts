@@ -25,11 +25,11 @@ const POSITION_LABELS = {
 };
 
 const POSITION_INSTRUCTIONS = {
-  'frente': 'Posicione o paciente de frente para a câmera, braços ao lado do corpo',
-  'lado-direito': 'Posicione o paciente de perfil direito, mostrando o lado direito do corpo',
-  'lado-esquerdo': 'Posicione o paciente de perfil esquerdo, mostrando o lado esquerdo do corpo', 
-  'costas': 'Posicione o paciente de costas para a câmera, braços ao lado do corpo',
-  'take-pe': 'Aproxime a câmera dos membros inferiores para avaliar joelho, tornozelo e alinhamento dos pés'
+  'frente': 'Paciente de frente, corpo inteiro no quadro, pés paralelos e braços relaxados ao lado do corpo',
+  'lado-direito': 'Paciente em perfil direito, com corpo inteiro visível e postura neutra',
+  'lado-esquerdo': 'Paciente em perfil esquerdo, com corpo inteiro visível e postura neutra', 
+  'costas': 'Paciente de costas, corpo inteiro no quadro, ombros e pelve alinhados',
+  'take-pe': 'Camera na altura dos tornozelos, joelhos/tornozelos/pes inteiros visiveis, peso igualmente distribuido e pés paralelos'
 };
 
 type IssueKey =

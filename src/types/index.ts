@@ -11,6 +11,14 @@ export interface PoseResults {
   image: HTMLCanvasElement | HTMLImageElement;
 }
 
+export interface CaptureGuidance {
+  canCapture: boolean;
+  score: number;
+  status: 'ok' | 'attention' | 'adjust';
+  title: string;
+  details: string[];
+}
+
 export interface PostureAnalysis {
   ombro: string;
   pelve: string;
