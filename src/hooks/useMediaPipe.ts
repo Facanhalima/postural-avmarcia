@@ -846,17 +846,18 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
 
   // Processar resultados do pose
   const onResults = useCallback((results: any) => {
-    if (!results.poseLandmarks || !canvasRef.current || !currentPosition) return;
+    if (!results.poseLandmarks || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const lm = results.poseLandmarks;
+    const positionForPreview = currentPosition ?? 'frente';
 
     const detectedType = estimateSomatotype(lm);
     updateEstimatedBiotype(detectedType);
-    setCaptureGuidance(buildCaptureGuidance(lm, currentPosition));
+    setCaptureGuidance(buildCaptureGuidance(lm, positionForPreview));
 
     // Limpar e desenhar frame
     ctx.save();
@@ -867,8 +868,10 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
     drawGrid(ctx, canvas.width, canvas.height);
 
     // Análise específica por posição
-    const newAnalysis = analyzePostureByPosition(lm, currentPosition);
-    setCurrentAnalysis(newAnalysis);
+    if (currentPosition) {
+      const newAnalysis = analyzePostureByPosition(lm, currentPosition);
+      setCurrentAnalysis(newAnalysis);
+    }
 
     // Salvar imagem atual
     const imageBase64 = canvas.toDataURL('image/jpeg', 0.92);
