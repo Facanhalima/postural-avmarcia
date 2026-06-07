@@ -5,7 +5,7 @@ interface VideoPlayerProps {
   videoRef: React.RefObject<HTMLVideoElement>;
   canvasRef: React.RefObject<HTMLCanvasElement>;
   isInitialized: boolean;
-  currentPosition: AnatomicalPosition;
+  currentPosition: AnatomicalPosition | null;
   currentInstruction: string;
   captureGuidance: CaptureGuidance;
   onCapture: () => void;

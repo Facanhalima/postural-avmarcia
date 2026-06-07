@@ -155,7 +155,6 @@ interface SidebarProps {
   totalSteps: number;
   onSelectPosition: (position: AnatomicalPosition) => void;
   onAddFootNotes: (notes: string) => void;
-  onUpdateCapture: (position: AnatomicalPosition, analysis: PostureAnalysis, imageBase64: string) => void;
   onCompleteSession: () => void;
   isMainPositionsComplete: boolean;
   mainPositions: AnatomicalPosition[];
@@ -171,7 +170,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalSteps,
   onSelectPosition,
   onAddFootNotes,
-  onUpdateCapture,
   onCompleteSession,
   isMainPositionsComplete,
   mainPositions

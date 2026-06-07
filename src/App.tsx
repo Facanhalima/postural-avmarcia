@@ -14,7 +14,6 @@ function App() {
     captureCurrentPosition,
     selectPosition,
     addFootNotes,
-    updateCaptureByPosition,
     completeSession,
     resetSession,
     getProgressPercentage,
@@ -90,7 +89,6 @@ function App() {
           totalSteps={totalSteps}
           onSelectPosition={selectPosition}
           onAddFootNotes={addFootNotes}
-          onUpdateCapture={updateCaptureByPosition}
           onCompleteSession={completeSession}
           isMainPositionsComplete={isMainPositionsComplete()}
           mainPositions={mainPositions}

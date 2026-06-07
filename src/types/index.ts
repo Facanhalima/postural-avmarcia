@@ -52,7 +52,7 @@ export interface SessionData {
   currentStep: number;
   isComplete: boolean;
   consolidatedAnalysis?: ConsolidatedAnalysis;
-  captureCache: Record<AnatomicalPosition, CaptureData>;
+  captureCache: Partial<Record<AnatomicalPosition, CaptureData>>;
   footNotes?: string;
   completedPositions: Set<AnatomicalPosition>;
 }
