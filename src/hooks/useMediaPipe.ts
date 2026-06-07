@@ -281,7 +281,7 @@ const loadDrawingApi = (): Promise<{ drawConnectors: DrawConnectorsFn; drawLandm
   return drawingScriptPromise;
 };
 
-export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMode: CameraFacingMode) => {
+export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraFacingMode: CameraFacingMode) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [currentAnalysis, setCurrentAnalysis] = useState<PostureAnalysis>({
@@ -846,7 +846,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
 
   // Processar resultados do pose
   const onResults = useCallback((results: any) => {
-    if (!results.poseLandmarks || !canvasRef.current) return;
+    if (!results.poseLandmarks || !canvasRef.current || !currentPosition) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');

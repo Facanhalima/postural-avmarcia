@@ -8,10 +8,17 @@ import type {
   TherapeuticPlan
 } from '../types';
 
-const ANATOMICAL_POSITIONS: AnatomicalPosition[] = [
+const MAIN_POSITIONS: AnatomicalPosition[] = [
   'frente', 
   'lado-direito', 
-  'lado-esquerdo', 
+  'lado-esquerdo',
+  'costas'
+];
+
+const ALL_POSITIONS: AnatomicalPosition[] = [
+  'frente', 
+  'lado-direito', 
+  'lado-esquerdo',
   'costas',
   'take-pe'
 ];
@@ -29,7 +36,7 @@ const POSITION_INSTRUCTIONS = {
   'lado-direito': 'Paciente em perfil direito, com corpo inteiro visível e postura neutra',
   'lado-esquerdo': 'Paciente em perfil esquerdo, com corpo inteiro visível e postura neutra', 
   'costas': 'Paciente de costas, corpo inteiro no quadro, ombros e pelve alinhados',
-  'take-pe': 'Camera na altura dos tornozelos, joelhos/tornozelos/pes inteiros visiveis, peso igualmente distribuido e pés paralelos'
+  'take-pe': 'Câmera na altura dos tornozelos, joelhos/tornozelos/pés inteiros visíveis, peso igualmente distribuído e pés paralelos'
 };
 
 type IssueKey =
@@ -119,44 +126,90 @@ const THERAPEUTIC_LIBRARY: Record<IssueKey, TherapeuticPlan> = {
 export const useSessionManager = () => {
   const [sessionData, setSessionData] = useState<SessionData>({
     captures: [],
-    currentPosition: 'frente',
+    currentPosition: null,
     currentStep: 0,
-    isComplete: false
+    isComplete: false,
+    captureCache: {},
+    footNotes: '',
+    completedPositions: new Set()
   });
 
   const getCurrentPositionLabel = useCallback(() => {
-    return POSITION_LABELS[sessionData.currentPosition];
+    return sessionData.currentPosition ? POSITION_LABELS[sessionData.currentPosition] : '';
   }, [sessionData.currentPosition]);
 
   const getCurrentInstruction = useCallback(() => {
-    return POSITION_INSTRUCTIONS[sessionData.currentPosition];
+    return sessionData.currentPosition ? POSITION_INSTRUCTIONS[sessionData.currentPosition] : '';
   }, [sessionData.currentPosition]);
 
+  const selectPosition = useCallback((position: AnatomicalPosition) => {
+    setSessionData(prev => ({
+      ...prev,
+      currentPosition: position
+    }));
+  }, []);
+
   const captureCurrentPosition = useCallback((analysis: PostureAnalysis, imageBase64: string) => {
+    if (!sessionData.currentPosition) return;
+
     const newCapture: CaptureData = {
       position: sessionData.currentPosition,
       analysis,
       imagemBase64: imageBase64,
-      timestamp: new Date()
+      timestamp: new Date(),
+      footNotesInstead: false
     };
 
     setSessionData(prev => {
-      const newCaptures = [...prev.captures, newCapture];
-      const nextStep = prev.currentStep + 1;
-      const isComplete = nextStep >= ANATOMICAL_POSITIONS.length;
-      
+      const newCompleted = new Set(prev.completedPositions);
+      newCompleted.add(prev.currentPosition!);
+
+      const newCache = { ...prev.captureCache };
+      newCache[prev.currentPosition!] = newCapture;
+
       return {
         ...prev,
-        captures: newCaptures,
-        currentStep: nextStep,
-        currentPosition: isComplete ? prev.currentPosition : ANATOMICAL_POSITIONS[nextStep],
-        isComplete
+        captureCache: newCache,
+        completedPositions: newCompleted,
+        currentPosition: null
       };
     });
-  }, [sessionData.currentPosition, sessionData.currentStep]);
+  }, [sessionData.currentPosition]);
+
+  const updateCaptureByPosition = useCallback((position: AnatomicalPosition, analysis: PostureAnalysis, imageBase64: string) => {
+    const updatedCapture: CaptureData = {
+      position,
+      analysis,
+      imagemBase64: imageBase64,
+      timestamp: new Date(),
+      footNotesInstead: false
+    };
+
+    setSessionData(prev => {
+      const newCache = { ...prev.captureCache };
+      newCache[position] = updatedCapture;
+      
+      const newCompleted = new Set(prev.completedPositions);
+      newCompleted.add(position);
+
+      return {
+        ...prev,
+        captureCache: newCache,
+        completedPositions: newCompleted
+      };
+    });
+  }, []);
+
+  const addFootNotes = useCallback((notes: string) => {
+    setSessionData(prev => ({
+      ...prev,
+      footNotes: notes,
+      currentPosition: null
+    }));
+  }, []);
 
   const generateConsolidatedAnalysis = useCallback((): ConsolidatedAnalysis => {
-    const { captures } = sessionData;
+    const captures = Object.values(sessionData.captureCache);
     
     const issues: string[] = [];
     const issueKeys = new Set<IssueKey>();
@@ -216,6 +269,13 @@ export const useSessionManager = () => {
       }
     });
 
+    // Adicionar observações dos pés se houver
+    if (sessionData.footNotes) {
+      if (hasAnyTerm(sessionData.footNotes, ['dor', 'desconforto', 'inchaço', 'vermelhidão', 'valgismo', 'varismo', 'pronação', 'supinação'])) {
+        registerIssue(`Observações relevantes dos pés: ${sessionData.footNotes}`, 1, 'tornozelos-pes');
+      }
+    }
+
     let severidade: 'leve' | 'moderada' | 'severa' = 'leve';
     if (severityScore >= 9) severidade = 'severa';
     else if (severityScore >= 5) severidade = 'moderada';
@@ -239,7 +299,7 @@ export const useSessionManager = () => {
       condutasEspecificas,
       severidade
     };
-  }, [sessionData.captures]);
+  }, [sessionData.captureCache, sessionData.footNotes]);
 
   const completeSession = useCallback(() => {
     const consolidatedAnalysis = generateConsolidatedAnalysis();
@@ -247,7 +307,8 @@ export const useSessionManager = () => {
     setSessionData(prev => ({
       ...prev,
       consolidatedAnalysis,
-      isComplete: true
+      isComplete: true,
+      currentPosition: null
     }));
 
     return consolidatedAnalysis;
@@ -256,24 +317,37 @@ export const useSessionManager = () => {
   const resetSession = useCallback(() => {
     setSessionData({
       captures: [],
-      currentPosition: 'frente',
+      currentPosition: null,
       currentStep: 0,
-      isComplete: false
+      isComplete: false,
+      captureCache: {},
+      footNotes: '',
+      completedPositions: new Set()
     });
   }, []);
 
   const getProgressPercentage = useCallback(() => {
-    return Math.round((sessionData.currentStep / ANATOMICAL_POSITIONS.length) * 100);
-  }, [sessionData.currentStep]);
+    return Math.round((sessionData.completedPositions.size / MAIN_POSITIONS.length) * 100);
+  }, [sessionData.completedPositions.size]);
+
+  const isMainPositionsComplete = useCallback(() => {
+    return MAIN_POSITIONS.every(pos => sessionData.completedPositions.has(pos));
+  }, [sessionData.completedPositions]);
 
   return {
     sessionData,
     getCurrentPositionLabel,
     getCurrentInstruction,
     captureCurrentPosition,
+    updateCaptureByPosition,
+    selectPosition,
+    addFootNotes,
     completeSession,
     resetSession,
     getProgressPercentage,
-    totalSteps: ANATOMICAL_POSITIONS.length
+    isMainPositionsComplete,
+    mainPositions: MAIN_POSITIONS,
+    allPositions: ALL_POSITIONS,
+    totalSteps: MAIN_POSITIONS.length
   };
 };

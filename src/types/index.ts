@@ -33,6 +33,7 @@ export interface PostureAnalysis {
   membrosInferiores?: string;
   pes?: string;
   relacaoPeTornozeloJoelho?: string;
+  observacoesPes?: string;
 }
 
 export interface CaptureData {
@@ -40,16 +41,20 @@ export interface CaptureData {
   analysis: PostureAnalysis;
   imagemBase64: string;
   timestamp: Date;
+  footNotesInstead?: boolean;
 }
 
 export type AnatomicalPosition = 'frente' | 'lado-direito' | 'lado-esquerdo' | 'costas' | 'take-pe';
 
 export interface SessionData {
   captures: CaptureData[];
-  currentPosition: AnatomicalPosition;
+  currentPosition: AnatomicalPosition | null;
   currentStep: number;
   isComplete: boolean;
   consolidatedAnalysis?: ConsolidatedAnalysis;
+  captureCache: Record<AnatomicalPosition, CaptureData>;
+  footNotes?: string;
+  completedPositions: Set<AnatomicalPosition>;
 }
 
 export interface ConsolidatedAnalysis {

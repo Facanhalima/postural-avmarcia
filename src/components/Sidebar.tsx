@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ResultsPanel } from './ResultsPanel';
 import { SessionProgress } from './SessionProgress';
 import { usePDFGenerator } from '../hooks/usePDFGenerator';
-import type { BodyCompositionData, PerimetryData, PostureAnalysis, PatientData, SessionData } from '../types';
+import type { BodyCompositionData, PerimetryData, PostureAnalysis, PatientData, SessionData, AnatomicalPosition } from '../types';
 
 const PERIMETRY_FIELDS: Array<{ key: keyof PerimetryData; label: string }> = [
   { key: 'ombro', label: 'Ombro' },
@@ -153,6 +153,12 @@ interface SidebarProps {
   currentInstruction: string;
   progressPercentage: number;
   totalSteps: number;
+  onSelectPosition: (position: AnatomicalPosition) => void;
+  onAddFootNotes: (notes: string) => void;
+  onUpdateCapture: (position: AnatomicalPosition, analysis: PostureAnalysis, imageBase64: string) => void;
+  onCompleteSession: () => void;
+  isMainPositionsComplete: boolean;
+  mainPositions: AnatomicalPosition[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -162,12 +168,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentPositionLabel,
   currentInstruction,
   progressPercentage,
-  totalSteps
+  totalSteps,
+  onSelectPosition,
+  onAddFootNotes,
+  onUpdateCapture,
+  onCompleteSession,
+  isMainPositionsComplete,
+  mainPositions
 }) => {
   const [biotypeEventInfo, setBiotypeEventInfo] = useState({
     sampleCount: 0,
     lastUpdated: '--'
   });
+  const [footNotesText, setFootNotesText] = useState('');
+  const [showFootNotesInput, setShowFootNotesInput] = useState(false);
 
   const detectedBiotype = extractDetectedBiotype(estimatedBiotype);
   const detectedBiotypeProfile = detectedBiotype ? BIOTYPE_CHARACTERISTICS[detectedBiotype] : null;
@@ -605,6 +619,122 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Seleção de Takes */}
+      {sessionData.completedPositions.size < mainPositions.length && !sessionData.isComplete && (
+        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+          <h3 className="text-sm font-semibold text-purple-800 mb-3">Selecione qual Take fazer</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {mainPositions.map((position) => {
+              const positionLabel = position === 'frente' ? 'Vista Frontal' 
+                : position === 'lado-direito' ? 'Perfil Direito'
+                : position === 'lado-esquerdo' ? 'Perfil Esquerdo'
+                : 'Vista Posterior';
+              const isCompleted = sessionData.completedPositions.has(position);
+              
+              return (
+                <button
+                  key={position}
+                  onClick={() => {
+                    if (!isCompleted || sessionData.captureCache[position]) {
+                      onSelectPosition(position);
+                    }
+                  }}
+                  className={`p-2 rounded text-xs font-medium transition-all ${
+                    isCompleted
+                      ? 'bg-green-100 text-green-800 hover:bg-green-200 cursor-pointer'
+                      : 'bg-purple-100 text-purple-800 hover:bg-purple-200 cursor-pointer'
+                  }`}
+                >
+                  {isCompleted ? '✓ ' : ''}{positionLabel}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Notas dos Pés (Alternativa ao Take) */}
+      {isMainPositionsComplete && !sessionData.isComplete && (
+        <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+          <h3 className="text-sm font-semibold text-amber-800 mb-2">Take dos Pés</h3>
+          {!sessionData.footNotes && !showFootNotesInput && (
+            <div className="space-y-2">
+              <button
+                onClick={() => onSelectPosition('take-pe')}
+                className="w-full px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-800 text-sm font-medium rounded transition-colors"
+              >
+                📷 Fazer Take dos Pés
+              </button>
+              <button
+                onClick={() => setShowFootNotesInput(true)}
+                className="w-full px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-medium rounded transition-colors"
+              >
+                📝 Adicionar Observações (Opcional)
+              </button>
+            </div>
+          )}
+          
+          {showFootNotesInput && (
+            <div className="space-y-2">
+              <textarea
+                value={footNotesText}
+                onChange={(e) => setFootNotesText(e.target.value)}
+                placeholder="Digite observações sobre os pés (postura, alinhamento, etc)..."
+                className="w-full p-2 border border-amber-300 rounded text-sm focus:ring-2 focus:ring-amber-500 outline-none resize-none h-20"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    if (footNotesText.trim()) {
+                      onAddFootNotes(footNotesText);
+                      setShowFootNotesInput(false);
+                      setFootNotesText('');
+                    }
+                  }}
+                  className="flex-1 px-2 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded transition-colors"
+                >
+                  ✓ Salvar Notas
+                </button>
+                <button
+                  onClick={() => {
+                    setShowFootNotesInput(false);
+                    setFootNotesText('');
+                  }}
+                  className="flex-1 px-2 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 text-sm font-medium rounded transition-colors"
+                >
+                  ✕ Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {sessionData.footNotes && (
+            <div className="mt-2 p-2 bg-amber-100 rounded border border-amber-300">
+              <p className="text-xs text-amber-900"><strong>Notas:</strong> {sessionData.footNotes}</p>
+              <button
+                onClick={() => {
+                  setShowFootNotesInput(true);
+                  setFootNotesText(sessionData.footNotes!);
+                }}
+                className="mt-2 text-xs text-amber-700 hover:text-amber-900 font-medium"
+              >
+                Editar Notas
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Botão Gerar Relatório (aparece quando os 4 takes principais estão completos) */}
+      {isMainPositionsComplete && !sessionData.isComplete && (
+        <button
+          onClick={onCompleteSession}
+          className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+        >
+          ✓ Gerar Relatório
+        </button>
+      )}
 
       {/* Progresso da Sessão */}
       <SessionProgress

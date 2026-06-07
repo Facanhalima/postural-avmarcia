@@ -12,9 +12,14 @@ function App() {
     getCurrentPositionLabel,
     getCurrentInstruction,
     captureCurrentPosition,
+    selectPosition,
+    addFootNotes,
+    updateCaptureByPosition,
     completeSession,
     resetSession,
     getProgressPercentage,
+    isMainPositionsComplete,
+    mainPositions,
     totalSteps
   } = useSessionManager();
 
@@ -31,13 +36,8 @@ function App() {
   } = useMediaPipe(sessionData.currentPosition, cameraFacingMode);
 
   const handleCapture = () => {
-    if (currentImageBase64 && currentAnalysis) {
+    if (currentImageBase64 && currentAnalysis && sessionData.currentPosition) {
       captureCurrentPosition(currentAnalysis, currentImageBase64);
-      
-      // Se completou todas as capturas, gerar análise consolidada
-      if (sessionData.currentStep + 1 >= totalSteps) {
-        completeSession();
-      }
     }
   };
 
@@ -61,7 +61,7 @@ function App() {
             currentInstruction={getCurrentInstruction()}
             captureGuidance={captureGuidance}
             onCapture={handleCapture}
-            canCapture={isInitialized && !sessionData.isComplete && captureGuidance.canCapture}
+            canCapture={isInitialized && !sessionData.isComplete && sessionData.currentPosition !== null && captureGuidance.canCapture}
             permissionError={permissionError}
             cameraFacingMode={cameraFacingMode}
             onToggleCamera={handleToggleCamera}
@@ -69,7 +69,7 @@ function App() {
           />
           
           {/* Botão de Reset */}
-          {sessionData.captures.length > 0 && (
+          {sessionData.completedPositions.size > 0 && (
             <div className="mt-4 text-center">
               <button
                 onClick={handleReset}
@@ -88,6 +88,12 @@ function App() {
           currentInstruction={getCurrentInstruction()}
           progressPercentage={getProgressPercentage()}
           totalSteps={totalSteps}
+          onSelectPosition={selectPosition}
+          onAddFootNotes={addFootNotes}
+          onUpdateCapture={updateCaptureByPosition}
+          onCompleteSession={completeSession}
+          isMainPositionsComplete={isMainPositionsComplete()}
+          mainPositions={mainPositions}
         />
       </div>
     </div>
