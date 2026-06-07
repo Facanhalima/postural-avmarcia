@@ -44,7 +44,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       >
         <video
           ref={videoRef}
-          className="hidden"
+          autoPlay
+          muted
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover"
           width={videoDimensions.width}
           height={videoDimensions.height}
         />
