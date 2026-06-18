@@ -166,11 +166,17 @@ export const useSessionManager = () => {
 
       const newCache = { ...prev.captureCache };
       newCache[prev.currentPosition!] = newCapture;
+      const newCaptures = [
+        ...prev.captures.filter(capture => capture.position !== prev.currentPosition),
+        newCapture
+      ];
 
       return {
         ...prev,
+        captures: newCaptures,
         captureCache: newCache,
         completedPositions: newCompleted,
+        currentStep: newCompleted.size,
         currentPosition: null
       };
     });
@@ -188,12 +194,17 @@ export const useSessionManager = () => {
     setSessionData(prev => {
       const newCache = { ...prev.captureCache };
       newCache[position] = updatedCapture;
+      const newCaptures = [
+        ...prev.captures.filter(capture => capture.position !== position),
+        updatedCapture
+      ];
       
       const newCompleted = new Set(prev.completedPositions);
       newCompleted.add(position);
 
       return {
         ...prev,
+        captures: newCaptures,
         captureCache: newCache,
         completedPositions: newCompleted
       };
@@ -308,6 +319,7 @@ export const useSessionManager = () => {
       ...prev,
       consolidatedAnalysis,
       isComplete: true,
+      currentStep: MAIN_POSITIONS.length,
       currentPosition: null
     }));
 

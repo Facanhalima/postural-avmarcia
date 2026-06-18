@@ -60,7 +60,7 @@ function App() {
             currentInstruction={getCurrentInstruction()}
             captureGuidance={captureGuidance}
             onCapture={handleCapture}
-            canCapture={isInitialized && !sessionData.isComplete && sessionData.currentPosition !== null && captureGuidance.canCapture}
+            canCapture={isInitialized && !sessionData.isComplete && sessionData.currentPosition !== null}
             permissionError={permissionError}
             cameraFacingMode={cameraFacingMode}
             onToggleCamera={handleToggleCamera}
