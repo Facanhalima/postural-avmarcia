@@ -34,6 +34,14 @@ function App() {
     videoDimensions
   } = useMediaPipe(sessionData.currentPosition, cameraFacingMode);
 
+  const captureDisabledReason = !isInitialized
+    ? permissionError || 'Aguardando inicialização da câmera.'
+    : sessionData.isComplete
+      ? 'A avaliação já foi concluída.'
+      : !sessionData.currentPosition
+        ? 'Selecione uma posição na barra lateral para liberar a captura.'
+        : undefined;
+
   const handleCapture = () => {
     if (currentImageBase64 && currentAnalysis && sessionData.currentPosition) {
       captureCurrentPosition(currentAnalysis, currentImageBase64);
@@ -61,6 +69,7 @@ function App() {
             captureGuidance={captureGuidance}
             onCapture={handleCapture}
             canCapture={isInitialized && !sessionData.isComplete && sessionData.currentPosition !== null}
+            captureDisabledReason={captureDisabledReason}
             permissionError={permissionError}
             cameraFacingMode={cameraFacingMode}
             onToggleCamera={handleToggleCamera}

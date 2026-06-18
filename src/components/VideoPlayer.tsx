@@ -10,6 +10,7 @@ interface VideoPlayerProps {
   captureGuidance: CaptureGuidance;
   onCapture: () => void;
   canCapture: boolean;
+  captureDisabledReason?: string;
   permissionError?: string;
   cameraFacingMode: 'user' | 'environment';
   onToggleCamera: () => void;
@@ -25,6 +26,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   captureGuidance,
   onCapture,
   canCapture,
+  captureDisabledReason,
   permissionError,
   cameraFacingMode,
   onToggleCamera,
@@ -120,6 +122,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           <button
             onClick={onCapture}
             disabled={!isInitialized || !canCapture}
+            title={captureDisabledReason ?? 'Capturar posição'}
             className={`px-5 sm:px-6 py-3 rounded-lg font-semibold text-sm sm:text-base text-white transition-all duration-300 ${
               isInitialized && canCapture
                 ? 'bg-blue-600 hover:bg-blue-700 hover:-translate-y-1 shadow-lg hover:shadow-xl'
@@ -136,6 +139,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
             Usar câmera {cameraFacingMode === 'user' ? 'traseira' : 'frontal'}
           </button>
         </div>
+
+        {!isInitialized || captureDisabledReason ? (
+          <p className="mt-3 text-xs sm:text-sm text-gray-600">
+            {captureDisabledReason ?? 'Aguardando liberação da câmera para capturar.'}
+          </p>
+        ) : (
+          !canCapture && (
+            <p className="mt-3 text-xs sm:text-sm text-amber-700">
+              O enquadramento ainda pode ser melhorado, mas a captura já está liberada.
+            </p>
+          )
+        )}
       </div>
     </div>
   );
