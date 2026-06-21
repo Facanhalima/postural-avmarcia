@@ -126,7 +126,7 @@ const THERAPEUTIC_LIBRARY: Record<IssueKey, TherapeuticPlan> = {
 export const useSessionManager = () => {
   const [sessionData, setSessionData] = useState<SessionData>({
     captures: [],
-    currentPosition: null,
+    currentPosition: 'frente',
     currentStep: 0,
     isComplete: false,
     captureCache: {},
@@ -171,13 +171,15 @@ export const useSessionManager = () => {
         newCapture
       ];
 
+      const nextMainPosition = MAIN_POSITIONS.find((position) => !newCompleted.has(position)) ?? null;
+
       return {
         ...prev,
         captures: newCaptures,
         captureCache: newCache,
         completedPositions: newCompleted,
         currentStep: newCompleted.size,
-        currentPosition: null
+        currentPosition: nextMainPosition
       };
     });
   }, [sessionData.currentPosition]);
@@ -329,7 +331,7 @@ export const useSessionManager = () => {
   const resetSession = useCallback(() => {
     setSessionData({
       captures: [],
-      currentPosition: null,
+      currentPosition: 'frente',
       currentStep: 0,
       isComplete: false,
       captureCache: {},

@@ -64,7 +64,8 @@ function App() {
             videoRef={videoRef} 
             canvasRef={canvasRef} 
             isInitialized={isInitialized}
-            currentPosition={sessionData.currentPosition}
+            sessionData={sessionData}
+            mainPositions={mainPositions}
             currentInstruction={getCurrentInstruction()}
             captureGuidance={captureGuidance}
             onCapture={handleCapture}
@@ -74,6 +75,7 @@ function App() {
             cameraFacingMode={cameraFacingMode}
             onToggleCamera={handleToggleCamera}
             videoDimensions={videoDimensions}
+            onSelectPosition={selectPosition}
           />
           
           {/* Botão de Reset */}
@@ -100,7 +102,6 @@ function App() {
           onAddFootNotes={addFootNotes}
           onCompleteSession={completeSession}
           isMainPositionsComplete={isMainPositionsComplete()}
-          mainPositions={mainPositions}
         />
       </div>
     </div>

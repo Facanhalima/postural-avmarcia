@@ -157,7 +157,6 @@ interface SidebarProps {
   onAddFootNotes: (notes: string) => void;
   onCompleteSession: () => void;
   isMainPositionsComplete: boolean;
-  mainPositions: AnatomicalPosition[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -171,8 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectPosition,
   onAddFootNotes,
   onCompleteSession,
-  isMainPositionsComplete,
-  mainPositions
+  isMainPositionsComplete
 }) => {
   const [biotypeEventInfo, setBiotypeEventInfo] = useState({
     sampleCount: 0,
@@ -617,40 +615,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Seleção de Takes */}
-      {sessionData.completedPositions.size < mainPositions.length && !sessionData.isComplete && (
-        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-          <h3 className="text-sm font-semibold text-purple-800 mb-3">Selecione qual Take fazer</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {mainPositions.map((position) => {
-              const positionLabel = position === 'frente' ? 'Vista Frontal' 
-                : position === 'lado-direito' ? 'Perfil Direito'
-                : position === 'lado-esquerdo' ? 'Perfil Esquerdo'
-                : 'Vista Posterior';
-              const isCompleted = sessionData.completedPositions.has(position);
-              
-              return (
-                <button
-                  key={position}
-                  onClick={() => {
-                    if (!isCompleted || sessionData.captureCache[position]) {
-                      onSelectPosition(position);
-                    }
-                  }}
-                  className={`p-2 rounded text-xs font-medium transition-all ${
-                    isCompleted
-                      ? 'bg-green-100 text-green-800 hover:bg-green-200 cursor-pointer'
-                      : 'bg-purple-100 text-purple-800 hover:bg-purple-200 cursor-pointer'
-                  }`}
-                >
-                  {isCompleted ? '✓ ' : ''}{positionLabel}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Notas dos Pés (Alternativa ao Take) */}
       {isMainPositionsComplete && !sessionData.isComplete && (
