@@ -317,6 +317,12 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
   const cameraInstanceRef = useRef<CameraInstance | null>(null);
   const isProcessingFrameRef = useRef(false);
   const lastProcessedFrameAtRef = useRef(0);
+  const lastAnalysisUpdateAtRef = useRef(0);
+  const lastGuidanceUpdateAtRef = useRef(0);
+  const lastBiotypeUpdateAtRef = useRef(0);
+  const lastAnalysisSignatureRef = useRef('');
+  const lastGuidanceSignatureRef = useRef('');
+  const lastBiotypeMessageRef = useRef('');
   const gridCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoDimensionsRef = useRef({ width: 640, height: 480 });
   const biotypeVotesRef = useRef<Array<'ectomorfo' | 'mesomorfo' | 'endomorfo'>>([]);
@@ -537,22 +543,34 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
 
     if (totalVotes < 6) {
       const message = 'Coletando proporções corporais...';
-      setEstimatedBiotype(message);
-      emitBiotypeMonitoringEvent(message, totalVotes);
+      if (message !== lastBiotypeMessageRef.current || performance.now() - lastBiotypeUpdateAtRef.current > 1200) {
+        lastBiotypeMessageRef.current = message;
+        lastBiotypeUpdateAtRef.current = performance.now();
+        setEstimatedBiotype(message);
+        emitBiotypeMonitoringEvent(message, totalVotes);
+      }
       return;
     }
 
     if (primaryVotes - secondaryVotes <= 2) {
       const hybrid = `${primary}-${secondary}`;
       const message = `Híbrido (${hybrid}) - predominância de ${primary}`;
-      setEstimatedBiotype(message);
-      emitBiotypeMonitoringEvent(message, totalVotes);
+      if (message !== lastBiotypeMessageRef.current || performance.now() - lastBiotypeUpdateAtRef.current > 1200) {
+        lastBiotypeMessageRef.current = message;
+        lastBiotypeUpdateAtRef.current = performance.now();
+        setEstimatedBiotype(message);
+        emitBiotypeMonitoringEvent(message, totalVotes);
+      }
       return;
     }
 
     const message = `${primary} (estimativa por câmera)`;
-    setEstimatedBiotype(message);
-    emitBiotypeMonitoringEvent(message, totalVotes);
+    if (message !== lastBiotypeMessageRef.current || performance.now() - lastBiotypeUpdateAtRef.current > 1200) {
+      lastBiotypeMessageRef.current = message;
+      lastBiotypeUpdateAtRef.current = performance.now();
+      setEstimatedBiotype(message);
+      emitBiotypeMonitoringEvent(message, totalVotes);
+    }
   }, [emitBiotypeMonitoringEvent]);
 
   const ensureGridCache = useCallback((width: number, height: number) => {
@@ -595,6 +613,8 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
 
     return cachedGrid;
   }, []);
+
+  const buildAnalysisSignature = useCallback((analysis: PostureAnalysis): string => Object.values(analysis).join('|'), []);
 
   // Função para análise específica por posição anatômica
   const analyzePostureByPosition = useCallback((lm: Landmark[], position: AnatomicalPosition): PostureAnalysis => {
@@ -875,10 +895,17 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
 
     const lm = results.poseLandmarks;
     const positionForPreview = currentPosition ?? 'frente';
+    const now = performance.now();
 
     const detectedType = estimateSomatotype(lm);
     updateEstimatedBiotype(detectedType);
-    setCaptureGuidance(buildCaptureGuidance(lm, positionForPreview));
+    const nextCaptureGuidance = buildCaptureGuidance(lm, positionForPreview);
+    const guidanceSignature = `${nextCaptureGuidance.status}|${nextCaptureGuidance.score}|${nextCaptureGuidance.title}|${nextCaptureGuidance.details.join('~')}`;
+    if (guidanceSignature !== lastGuidanceSignatureRef.current && now - lastGuidanceUpdateAtRef.current > 180) {
+      lastGuidanceSignatureRef.current = guidanceSignature;
+      lastGuidanceUpdateAtRef.current = now;
+      setCaptureGuidance(nextCaptureGuidance);
+    }
 
     // Limpar e desenhar frame
     ctx.save();
@@ -894,7 +921,12 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
     // Análise específica por posição
     if (currentPosition) {
       const newAnalysis = analyzePostureByPosition(lm, currentPosition);
-      setCurrentAnalysis(newAnalysis);
+      const analysisSignature = buildAnalysisSignature(newAnalysis);
+      if (analysisSignature !== lastAnalysisSignatureRef.current && now - lastAnalysisUpdateAtRef.current > 220) {
+        lastAnalysisSignatureRef.current = analysisSignature;
+        lastAnalysisUpdateAtRef.current = now;
+        setCurrentAnalysis(newAnalysis);
+      }
     }
 
     // Desenhar esqueleto
@@ -904,7 +936,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
     }
 
     ctx.restore();
-  }, [currentPosition, analyzePostureByPosition, buildCaptureGuidance, ensureGridCache, estimateSomatotype, updateEstimatedBiotype]);
+  }, [analyzePostureByPosition, buildAnalysisSignature, buildCaptureGuidance, ensureGridCache, estimateSomatotype, currentPosition, updateEstimatedBiotype]);
 
   const captureCurrentImageBase64 = useCallback((): string => {
     if (!canvasRef.current) {
@@ -1045,6 +1077,12 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
       isCancelled = true;
       isProcessingFrameRef.current = false;
       lastProcessedFrameAtRef.current = 0;
+      lastAnalysisUpdateAtRef.current = 0;
+      lastGuidanceUpdateAtRef.current = 0;
+      lastBiotypeUpdateAtRef.current = 0;
+      lastAnalysisSignatureRef.current = '';
+      lastGuidanceSignatureRef.current = '';
+      lastBiotypeMessageRef.current = '';
       gridCanvasRef.current = null;
       if (cameraInstanceRef.current) {
         cameraInstanceRef.current.stop();
