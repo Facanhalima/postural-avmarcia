@@ -53,7 +53,7 @@ function App() {
     currentAnalysis, 
     estimatedBiotype,
     captureGuidance,
-    currentImageBase64, 
+    captureCurrentImageBase64,
     isInitialized,
     permissionError,
     videoDimensions
@@ -68,8 +68,10 @@ function App() {
         : undefined;
 
   const handleCapture = () => {
-    if (currentImageBase64 && currentAnalysis && sessionData.currentPosition) {
-      captureCurrentPosition(currentAnalysis, currentImageBase64);
+    const imageBase64 = captureCurrentImageBase64();
+
+    if (imageBase64 && currentAnalysis && sessionData.currentPosition) {
+      captureCurrentPosition(currentAnalysis, imageBase64);
     }
   };
 

@@ -301,7 +301,6 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
   });
   const [isInitialized, setIsInitialized] = useState(false);
   const [permissionError, setPermissionError] = useState<string>('');
-  const [currentImageBase64, setCurrentImageBase64] = useState<string>('');
   const [videoDimensions, setVideoDimensions] = useState({ width: 640, height: 480 });
   const [estimatedBiotype, setEstimatedBiotype] = useState<string>('Aguardando leitura frontal...');
   const [captureGuidance, setCaptureGuidance] = useState<CaptureGuidance>({
@@ -873,10 +872,6 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
       setCurrentAnalysis(newAnalysis);
     }
 
-    // Salvar imagem atual
-    const imageBase64 = canvas.toDataURL('image/jpeg', 0.92);
-    setCurrentImageBase64(imageBase64);
-
     // Desenhar esqueleto
     if (drawConnectorsRef.current && drawLandmarksRef.current) {
       drawConnectorsRef.current(ctx, lm, poseConnectionsRef.current as any, { color: '#00FF00', lineWidth: 2 });
@@ -885,6 +880,14 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
 
     ctx.restore();
   }, [currentPosition, analyzePostureByPosition, buildCaptureGuidance, estimateSomatotype, updateEstimatedBiotype]);
+
+  const captureCurrentImageBase64 = useCallback((): string => {
+    if (!canvasRef.current) {
+      return '';
+    }
+
+    return canvasRef.current.toDataURL('image/jpeg', 0.92);
+  }, []);
 
   // Inicializar MediaPipe
   useEffect(() => {
@@ -1041,7 +1044,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
     currentAnalysis,
     estimatedBiotype,
     captureGuidance,
-    currentImageBase64,
+    captureCurrentImageBase64,
     isInitialized,
     permissionError,
     videoDimensions
