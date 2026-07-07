@@ -315,6 +315,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
   const drawLandmarksRef = useRef<DrawLandmarksFn | null>(null);
   const poseInstanceRef = useRef<PoseInstance | null>(null);
   const cameraInstanceRef = useRef<CameraInstance | null>(null);
+  const isProcessingFrameRef = useRef(false);
   const videoDimensionsRef = useRef({ width: 640, height: 480 });
   const biotypeVotesRef = useRef<Array<'ectomorfo' | 'mesomorfo' | 'endomorfo'>>([]);
 
@@ -899,35 +900,6 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
 
     const initializePose = async () => {
       try {
-        // Primeiro, pedir permissão explícita para acessar a câmera
-        let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { 
-              facingMode: cameraFacingMode,
-              width: { ideal: 640 },
-              height: { ideal: 480 }
-            },
-            audio: false
-          });
-
-          // Fechar o stream inicial para que o MediaPipe possa usá-lo
-          stream.getTracks().forEach(track => track.stop());
-          console.log('Permissão de câmera concedida');
-        } catch (permError: any) {
-          console.error('Erro ao solicitar permissão de câmera:', permError);
-          if (permError.name === 'NotAllowedError') {
-            setPermissionError(
-              'Permissão de câmera negada. Por favor, verifique as configurações de privacidade do navegador.'
-            );
-          } else if (permError.name === 'NotFoundError') {
-            setPermissionError('Nenhuma câmera foi encontrada. Verifique se o dispositivo possui câmera.');
-          } else {
-            setPermissionError(`Erro ao acessar câmera: ${permError.message}`);
-          }
-          return;
-        }
-
         // Inicializar o MediaPipe Pose
         console.log('Iniciando Pose...');
         let poseInstance: PoseInstance;
@@ -975,8 +947,14 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
         // Inicializar câmera
         console.log('Iniciando câmera...');
         const CameraCtor = await loadCameraCtor();
+        const targetWidth = cameraFacingMode === 'environment' ? 480 : 640;
+        const targetHeight = cameraFacingMode === 'environment' ? 360 : 480;
         const camera = new CameraCtor(videoRef.current!, {
           onFrame: async () => {
+            if (isProcessingFrameRef.current || isCancelled) {
+              return;
+            }
+
             if (videoRef.current) {
               const currentWidth = videoRef.current.videoWidth || 640;
               const currentHeight = videoRef.current.videoHeight || 480;
@@ -994,11 +972,17 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
                 }
               }
 
-              await poseInstance.send({ image: videoRef.current });
+              isProcessingFrameRef.current = true;
+
+              try {
+                await poseInstance.send({ image: videoRef.current });
+              } finally {
+                isProcessingFrameRef.current = false;
+              }
             }
           },
-          width: 640,
-          height: 480,
+          width: targetWidth,
+          height: targetHeight,
           facingMode: cameraFacingMode
         });
 
@@ -1027,6 +1011,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
 
     return () => {
       isCancelled = true;
+      isProcessingFrameRef.current = false;
       if (cameraInstanceRef.current) {
         cameraInstanceRef.current.stop();
         cameraInstanceRef.current = null;
