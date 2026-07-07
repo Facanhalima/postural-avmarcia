@@ -316,6 +316,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
   const poseInstanceRef = useRef<PoseInstance | null>(null);
   const cameraInstanceRef = useRef<CameraInstance | null>(null);
   const isProcessingFrameRef = useRef(false);
+  const gridCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoDimensionsRef = useRef({ width: 640, height: 480 });
   const biotypeVotesRef = useRef<Array<'ectomorfo' | 'mesomorfo' | 'endomorfo'>>([]);
 
@@ -553,27 +554,46 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
     emitBiotypeMonitoringEvent(message, totalVotes);
   }, [emitBiotypeMonitoringEvent]);
 
-  // Função para desenhar o simetrógrafo (grade)
-  const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
-    ctx.lineWidth = 1;
-    
-    // Linhas verticais
-    for (let i = 0; i < width; i += 40) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, height);
-      ctx.stroke();
+  const ensureGridCache = useCallback((width: number, height: number) => {
+    if (typeof document === 'undefined') {
+      return null;
     }
-    
-    // Linhas horizontais
-    for (let j = 0; j < height; j += 40) {
-      ctx.beginPath();
-      ctx.moveTo(0, j);
-      ctx.lineTo(width, j);
-      ctx.stroke();
+
+    const cachedGrid = gridCanvasRef.current;
+    if (!cachedGrid || cachedGrid.width !== width || cachedGrid.height !== height) {
+      const gridCanvas = document.createElement('canvas');
+      gridCanvas.width = width;
+      gridCanvas.height = height;
+
+      const gridCtx = gridCanvas.getContext('2d');
+      if (!gridCtx) {
+        return null;
+      }
+
+      gridCtx.clearRect(0, 0, width, height);
+      gridCtx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+      gridCtx.lineWidth = 1;
+
+      for (let i = 0; i < width; i += 40) {
+        gridCtx.beginPath();
+        gridCtx.moveTo(i, 0);
+        gridCtx.lineTo(i, height);
+        gridCtx.stroke();
+      }
+
+      for (let j = 0; j < height; j += 40) {
+        gridCtx.beginPath();
+        gridCtx.moveTo(0, j);
+        gridCtx.lineTo(width, j);
+        gridCtx.stroke();
+      }
+
+      gridCanvasRef.current = gridCanvas;
+      return gridCanvas;
     }
-  };
+
+    return cachedGrid;
+  }, []);
 
   // Função para análise específica por posição anatômica
   const analyzePostureByPosition = useCallback((lm: Landmark[], position: AnatomicalPosition): PostureAnalysis => {
@@ -864,8 +884,11 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
-    // Desenhar grade (simetrógrafo)
-    drawGrid(ctx, canvas.width, canvas.height);
+    // Desenhar grade (simetrógrafo) a partir de cache para evitar custo por frame
+    const cachedGrid = ensureGridCache(canvas.width, canvas.height);
+    if (cachedGrid) {
+      ctx.drawImage(cachedGrid, 0, 0, canvas.width, canvas.height);
+    }
 
     // Análise específica por posição
     if (currentPosition) {
@@ -880,7 +903,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
     }
 
     ctx.restore();
-  }, [currentPosition, analyzePostureByPosition, buildCaptureGuidance, estimateSomatotype, updateEstimatedBiotype]);
+  }, [currentPosition, analyzePostureByPosition, buildCaptureGuidance, ensureGridCache, estimateSomatotype, updateEstimatedBiotype]);
 
   const captureCurrentImageBase64 = useCallback((): string => {
     if (!canvasRef.current) {
@@ -1012,6 +1035,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
     return () => {
       isCancelled = true;
       isProcessingFrameRef.current = false;
+      gridCanvasRef.current = null;
       if (cameraInstanceRef.current) {
         cameraInstanceRef.current.stop();
         cameraInstanceRef.current = null;
