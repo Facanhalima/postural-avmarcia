@@ -316,6 +316,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
   const poseInstanceRef = useRef<PoseInstance | null>(null);
   const cameraInstanceRef = useRef<CameraInstance | null>(null);
   const isProcessingFrameRef = useRef(false);
+  const lastProcessedFrameAtRef = useRef(0);
   const gridCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoDimensionsRef = useRef({ width: 640, height: 480 });
   const biotypeVotesRef = useRef<Array<'ectomorfo' | 'mesomorfo' | 'endomorfo'>>([]);
@@ -959,8 +960,8 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
         }
 
         poseInstance.setOptions({
-          modelComplexity: 1,
-          smoothLandmarks: true,
+          modelComplexity: cameraFacingMode === 'environment' ? 0 : 1,
+          smoothLandmarks: cameraFacingMode !== 'environment',
           minDetectionConfidence: 0.5,
           minTrackingConfidence: 0.5
         });
@@ -970,11 +971,18 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
         // Inicializar câmera
         console.log('Iniciando câmera...');
         const CameraCtor = await loadCameraCtor();
-        const targetWidth = cameraFacingMode === 'environment' ? 480 : 640;
-        const targetHeight = cameraFacingMode === 'environment' ? 360 : 480;
+        const isRearCamera = cameraFacingMode === 'environment';
+        const targetWidth = isRearCamera ? 320 : 640;
+        const targetHeight = isRearCamera ? 240 : 480;
+        const frameIntervalMs = isRearCamera ? 160 : 80;
         const camera = new CameraCtor(videoRef.current!, {
           onFrame: async () => {
             if (isProcessingFrameRef.current || isCancelled) {
+              return;
+            }
+
+            const now = performance.now();
+            if (now - lastProcessedFrameAtRef.current < frameIntervalMs) {
               return;
             }
 
@@ -996,6 +1004,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
               }
 
               isProcessingFrameRef.current = true;
+              lastProcessedFrameAtRef.current = now;
 
               try {
                 await poseInstance.send({ image: videoRef.current });
@@ -1035,6 +1044,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
     return () => {
       isCancelled = true;
       isProcessingFrameRef.current = false;
+      lastProcessedFrameAtRef.current = 0;
       gridCanvasRef.current = null;
       if (cameraInstanceRef.current) {
         cameraInstanceRef.current.stop();
