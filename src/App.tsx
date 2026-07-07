@@ -2,10 +2,35 @@ import { Sidebar } from './components/Sidebar';
 import { VideoPlayer } from './components/VideoPlayer';
 import { useMediaPipe } from './hooks/useMediaPipe';
 import { useSessionManager } from './hooks/useSessionManager';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 function App() {
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
+  const [mobileCaptureMode, setMobileCaptureMode] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true;
+    }
+
+    return window.matchMedia('(max-width: 639px)').matches;
+  });
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 639px)');
+
+    const syncMobileCaptureMode = (event: MediaQueryListEvent | MediaQueryList) => {
+      setMobileCaptureMode(event.matches);
+    };
+
+    syncMobileCaptureMode(mediaQuery);
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', syncMobileCaptureMode);
+      return () => mediaQuery.removeEventListener('change', syncMobileCaptureMode);
+    }
+
+    mediaQuery.addListener(syncMobileCaptureMode);
+    return () => mediaQuery.removeListener(syncMobileCaptureMode);
+  }, []);
 
   const {
     sessionData,
@@ -76,6 +101,8 @@ function App() {
             onToggleCamera={handleToggleCamera}
             videoDimensions={videoDimensions}
             onSelectPosition={selectPosition}
+            isMobileCaptureMode={mobileCaptureMode}
+            onToggleMobileCaptureMode={() => setMobileCaptureMode((previous) => !previous)}
           />
           
           {/* Botão de Reset */}
