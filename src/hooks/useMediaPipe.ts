@@ -992,8 +992,8 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
         }
 
         poseInstance.setOptions({
-          modelComplexity: cameraFacingMode === 'environment' ? 0 : 1,
-          smoothLandmarks: cameraFacingMode !== 'environment',
+          modelComplexity: 1,
+          smoothLandmarks: true,
           minDetectionConfidence: 0.5,
           minTrackingConfidence: 0.5
         });
@@ -1003,10 +1003,9 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraF
         // Inicializar câmera
         console.log('Iniciando câmera...');
         const CameraCtor = await loadCameraCtor();
-        const isRearCamera = cameraFacingMode === 'environment';
-        const targetWidth = isRearCamera ? 320 : 640;
-        const targetHeight = isRearCamera ? 240 : 480;
-        const frameIntervalMs = isRearCamera ? 160 : 80;
+        const targetWidth = 640;
+        const targetHeight = 480;
+        const frameIntervalMs = 80;
         const camera = new CameraCtor(videoRef.current!, {
           onFrame: async () => {
             if (isProcessingFrameRef.current || isCancelled) {
