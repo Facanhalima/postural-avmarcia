@@ -185,7 +185,7 @@ export const usePDFGenerator = () => {
       doc.text(geralLines, 20, currentY);
       currentY += geralLines.length * 5;
 
-      doc.text(`Severidade: ${sessionData.consolidatedAnalysis.severidade.toUpperCase()}`, 20, currentY);
+      doc.text(`Classificação: ${sessionData.consolidatedAnalysis.severidade.toUpperCase()}`, 20, currentY);
       currentY += 10;
 
       // Pontos críticos

@@ -3,7 +3,7 @@ import type { PostureAnalysis, AnatomicalPosition } from '../types';
 
 interface ResultsPanelProps {
   analysis: PostureAnalysis;
-  currentPosition: AnatomicalPosition;
+  currentPosition: AnatomicalPosition | null;
 }
 
 export const ResultsPanel: React.FC<ResultsPanelProps> = ({ analysis, currentPosition }) => {
@@ -68,7 +68,7 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = ({ analysis, currentPos
   return (
     <div className="bg-green-50 p-4 rounded-lg border-l-4 border-secondary mt-4">
       <strong className="text-green-800">
-        Análise Biomecânica - {positionLabels[currentPosition]}:
+        Análise Biomecânica - {currentPosition ? positionLabels[currentPosition] : 'Aguardando seleção de posição'}:
       </strong>
       <div className="mt-2 space-y-2">
         {relevantAnalyses.map(({ label, value }) => (

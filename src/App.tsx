@@ -2,19 +2,48 @@ import { Sidebar } from './components/Sidebar';
 import { VideoPlayer } from './components/VideoPlayer';
 import { useMediaPipe } from './hooks/useMediaPipe';
 import { useSessionManager } from './hooks/useSessionManager';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 function App() {
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
+  const [mobileCaptureMode, setMobileCaptureMode] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true;
+    }
+
+    return window.matchMedia('(max-width: 639px)').matches;
+  });
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 639px)');
+
+    const syncMobileCaptureMode = (event: MediaQueryListEvent | MediaQueryList) => {
+      setMobileCaptureMode(event.matches);
+    };
+
+    syncMobileCaptureMode(mediaQuery);
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', syncMobileCaptureMode);
+      return () => mediaQuery.removeEventListener('change', syncMobileCaptureMode);
+    }
+
+    mediaQuery.addListener(syncMobileCaptureMode);
+    return () => mediaQuery.removeListener(syncMobileCaptureMode);
+  }, []);
 
   const {
     sessionData,
     getCurrentPositionLabel,
     getCurrentInstruction,
     captureCurrentPosition,
+    selectPosition,
+    addFootNotes,
     completeSession,
     resetSession,
     getProgressPercentage,
+    isMainPositionsComplete,
+    mainPositions,
     totalSteps
   } = useSessionManager();
 
@@ -24,20 +53,25 @@ function App() {
     currentAnalysis, 
     estimatedBiotype,
     captureGuidance,
-    currentImageBase64, 
+    captureCurrentImageBase64,
     isInitialized,
     permissionError,
     videoDimensions
   } = useMediaPipe(sessionData.currentPosition, cameraFacingMode);
 
+  const captureDisabledReason = !isInitialized
+    ? permissionError || 'Aguardando inicialização da câmera.'
+    : sessionData.isComplete
+      ? 'A avaliação já foi concluída.'
+      : !sessionData.currentPosition
+        ? 'Selecione uma posição na barra lateral para liberar a captura.'
+        : undefined;
+
   const handleCapture = () => {
-    if (currentImageBase64 && currentAnalysis) {
-      captureCurrentPosition(currentAnalysis, currentImageBase64);
-      
-      // Se completou todas as capturas, gerar análise consolidada
-      if (sessionData.currentStep + 1 >= totalSteps) {
-        completeSession();
-      }
+    const imageBase64 = captureCurrentImageBase64();
+
+    if (imageBase64 && currentAnalysis && sessionData.currentPosition) {
+      captureCurrentPosition(currentAnalysis, imageBase64);
     }
   };
 
@@ -57,19 +91,24 @@ function App() {
             videoRef={videoRef} 
             canvasRef={canvasRef} 
             isInitialized={isInitialized}
-            currentPosition={sessionData.currentPosition}
+            sessionData={sessionData}
+            mainPositions={mainPositions}
             currentInstruction={getCurrentInstruction()}
             captureGuidance={captureGuidance}
             onCapture={handleCapture}
-            canCapture={isInitialized && !sessionData.isComplete && captureGuidance.canCapture}
+            canCapture={isInitialized && !sessionData.isComplete && sessionData.currentPosition !== null}
+            captureDisabledReason={captureDisabledReason}
             permissionError={permissionError}
             cameraFacingMode={cameraFacingMode}
             onToggleCamera={handleToggleCamera}
             videoDimensions={videoDimensions}
+            onSelectPosition={selectPosition}
+            isMobileCaptureMode={mobileCaptureMode}
+            onToggleMobileCaptureMode={() => setMobileCaptureMode((previous) => !previous)}
           />
           
           {/* Botão de Reset */}
-          {sessionData.captures.length > 0 && (
+          {sessionData.completedPositions.size > 0 && (
             <div className="mt-4 text-center">
               <button
                 onClick={handleReset}
@@ -88,6 +127,10 @@ function App() {
           currentInstruction={getCurrentInstruction()}
           progressPercentage={getProgressPercentage()}
           totalSteps={totalSteps}
+          onSelectPosition={selectPosition}
+          onAddFootNotes={addFootNotes}
+          onCompleteSession={completeSession}
+          isMainPositionsComplete={isMainPositionsComplete()}
         />
       </div>
     </div>

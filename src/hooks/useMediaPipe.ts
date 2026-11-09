@@ -281,7 +281,7 @@ const loadDrawingApi = (): Promise<{ drawConnectors: DrawConnectorsFn; drawLandm
   return drawingScriptPromise;
 };
 
-export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMode: CameraFacingMode) => {
+export const useMediaPipe = (currentPosition: AnatomicalPosition | null, cameraFacingMode: CameraFacingMode) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [currentAnalysis, setCurrentAnalysis] = useState<PostureAnalysis>({
@@ -301,7 +301,6 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
   });
   const [isInitialized, setIsInitialized] = useState(false);
   const [permissionError, setPermissionError] = useState<string>('');
-  const [currentImageBase64, setCurrentImageBase64] = useState<string>('');
   const [videoDimensions, setVideoDimensions] = useState({ width: 640, height: 480 });
   const [estimatedBiotype, setEstimatedBiotype] = useState<string>('Aguardando leitura frontal...');
   const [captureGuidance, setCaptureGuidance] = useState<CaptureGuidance>({
@@ -316,6 +315,15 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
   const drawLandmarksRef = useRef<DrawLandmarksFn | null>(null);
   const poseInstanceRef = useRef<PoseInstance | null>(null);
   const cameraInstanceRef = useRef<CameraInstance | null>(null);
+  const isProcessingFrameRef = useRef(false);
+  const lastProcessedFrameAtRef = useRef(0);
+  const lastAnalysisUpdateAtRef = useRef(0);
+  const lastGuidanceUpdateAtRef = useRef(0);
+  const lastBiotypeUpdateAtRef = useRef(0);
+  const lastAnalysisSignatureRef = useRef('');
+  const lastGuidanceSignatureRef = useRef('');
+  const lastBiotypeMessageRef = useRef('');
+  const gridCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoDimensionsRef = useRef({ width: 640, height: 480 });
   const biotypeVotesRef = useRef<Array<'ectomorfo' | 'mesomorfo' | 'endomorfo'>>([]);
 
@@ -535,45 +543,78 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
 
     if (totalVotes < 6) {
       const message = 'Coletando proporções corporais...';
-      setEstimatedBiotype(message);
-      emitBiotypeMonitoringEvent(message, totalVotes);
+      if (message !== lastBiotypeMessageRef.current || performance.now() - lastBiotypeUpdateAtRef.current > 1200) {
+        lastBiotypeMessageRef.current = message;
+        lastBiotypeUpdateAtRef.current = performance.now();
+        setEstimatedBiotype(message);
+        emitBiotypeMonitoringEvent(message, totalVotes);
+      }
       return;
     }
 
     if (primaryVotes - secondaryVotes <= 2) {
       const hybrid = `${primary}-${secondary}`;
       const message = `Híbrido (${hybrid}) - predominância de ${primary}`;
-      setEstimatedBiotype(message);
-      emitBiotypeMonitoringEvent(message, totalVotes);
+      if (message !== lastBiotypeMessageRef.current || performance.now() - lastBiotypeUpdateAtRef.current > 1200) {
+        lastBiotypeMessageRef.current = message;
+        lastBiotypeUpdateAtRef.current = performance.now();
+        setEstimatedBiotype(message);
+        emitBiotypeMonitoringEvent(message, totalVotes);
+      }
       return;
     }
 
     const message = `${primary} (estimativa por câmera)`;
-    setEstimatedBiotype(message);
-    emitBiotypeMonitoringEvent(message, totalVotes);
+    if (message !== lastBiotypeMessageRef.current || performance.now() - lastBiotypeUpdateAtRef.current > 1200) {
+      lastBiotypeMessageRef.current = message;
+      lastBiotypeUpdateAtRef.current = performance.now();
+      setEstimatedBiotype(message);
+      emitBiotypeMonitoringEvent(message, totalVotes);
+    }
   }, [emitBiotypeMonitoringEvent]);
 
-  // Função para desenhar o simetrógrafo (grade)
-  const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
-    ctx.lineWidth = 1;
-    
-    // Linhas verticais
-    for (let i = 0; i < width; i += 40) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, height);
-      ctx.stroke();
+  const ensureGridCache = useCallback((width: number, height: number) => {
+    if (typeof document === 'undefined') {
+      return null;
     }
-    
-    // Linhas horizontais
-    for (let j = 0; j < height; j += 40) {
-      ctx.beginPath();
-      ctx.moveTo(0, j);
-      ctx.lineTo(width, j);
-      ctx.stroke();
+
+    const cachedGrid = gridCanvasRef.current;
+    if (!cachedGrid || cachedGrid.width !== width || cachedGrid.height !== height) {
+      const gridCanvas = document.createElement('canvas');
+      gridCanvas.width = width;
+      gridCanvas.height = height;
+
+      const gridCtx = gridCanvas.getContext('2d');
+      if (!gridCtx) {
+        return null;
+      }
+
+      gridCtx.clearRect(0, 0, width, height);
+      gridCtx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+      gridCtx.lineWidth = 1;
+
+      for (let i = 0; i < width; i += 40) {
+        gridCtx.beginPath();
+        gridCtx.moveTo(i, 0);
+        gridCtx.lineTo(i, height);
+        gridCtx.stroke();
+      }
+
+      for (let j = 0; j < height; j += 40) {
+        gridCtx.beginPath();
+        gridCtx.moveTo(0, j);
+        gridCtx.lineTo(width, j);
+        gridCtx.stroke();
+      }
+
+      gridCanvasRef.current = gridCanvas;
+      return gridCanvas;
     }
-  };
+
+    return cachedGrid;
+  }, []);
+
+  const buildAnalysisSignature = useCallback((analysis: PostureAnalysis): string => Object.values(analysis).join('|'), []);
 
   // Função para análise específica por posição anatômica
   const analyzePostureByPosition = useCallback((lm: Landmark[], position: AnatomicalPosition): PostureAnalysis => {
@@ -853,26 +894,40 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
     if (!ctx) return;
 
     const lm = results.poseLandmarks;
+    const positionForPreview = currentPosition ?? 'frente';
+    const now = performance.now();
 
     const detectedType = estimateSomatotype(lm);
     updateEstimatedBiotype(detectedType);
-    setCaptureGuidance(buildCaptureGuidance(lm, currentPosition));
+    const nextCaptureGuidance = buildCaptureGuidance(lm, positionForPreview);
+    const guidanceSignature = `${nextCaptureGuidance.status}|${nextCaptureGuidance.score}|${nextCaptureGuidance.title}|${nextCaptureGuidance.details.join('~')}`;
+    if (guidanceSignature !== lastGuidanceSignatureRef.current && now - lastGuidanceUpdateAtRef.current > 180) {
+      lastGuidanceSignatureRef.current = guidanceSignature;
+      lastGuidanceUpdateAtRef.current = now;
+      setCaptureGuidance(nextCaptureGuidance);
+    }
 
     // Limpar e desenhar frame
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
 
-    // Desenhar grade (simetrógrafo)
-    drawGrid(ctx, canvas.width, canvas.height);
+    // Desenhar grade (simetrógrafo) a partir de cache para evitar custo por frame
+    const cachedGrid = ensureGridCache(canvas.width, canvas.height);
+    if (cachedGrid) {
+      ctx.drawImage(cachedGrid, 0, 0, canvas.width, canvas.height);
+    }
 
     // Análise específica por posição
-    const newAnalysis = analyzePostureByPosition(lm, currentPosition);
-    setCurrentAnalysis(newAnalysis);
-
-    // Salvar imagem atual
-    const imageBase64 = canvas.toDataURL('image/jpeg', 0.92);
-    setCurrentImageBase64(imageBase64);
+    if (currentPosition) {
+      const newAnalysis = analyzePostureByPosition(lm, currentPosition);
+      const analysisSignature = buildAnalysisSignature(newAnalysis);
+      if (analysisSignature !== lastAnalysisSignatureRef.current && now - lastAnalysisUpdateAtRef.current > 220) {
+        lastAnalysisSignatureRef.current = analysisSignature;
+        lastAnalysisUpdateAtRef.current = now;
+        setCurrentAnalysis(newAnalysis);
+      }
+    }
 
     // Desenhar esqueleto
     if (drawConnectorsRef.current && drawLandmarksRef.current) {
@@ -881,7 +936,15 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
     }
 
     ctx.restore();
-  }, [currentPosition, analyzePostureByPosition, buildCaptureGuidance, estimateSomatotype, updateEstimatedBiotype]);
+  }, [analyzePostureByPosition, buildAnalysisSignature, buildCaptureGuidance, ensureGridCache, estimateSomatotype, currentPosition, updateEstimatedBiotype]);
+
+  const captureCurrentImageBase64 = useCallback((): string => {
+    if (!canvasRef.current) {
+      return '';
+    }
+
+    return canvasRef.current.toDataURL('image/jpeg', 0.92);
+  }, []);
 
   // Inicializar MediaPipe
   useEffect(() => {
@@ -893,35 +956,6 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
 
     const initializePose = async () => {
       try {
-        // Primeiro, pedir permissão explícita para acessar a câmera
-        let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { 
-              facingMode: cameraFacingMode,
-              width: { ideal: 640 },
-              height: { ideal: 480 }
-            },
-            audio: false
-          });
-
-          // Fechar o stream inicial para que o MediaPipe possa usá-lo
-          stream.getTracks().forEach(track => track.stop());
-          console.log('Permissão de câmera concedida');
-        } catch (permError: any) {
-          console.error('Erro ao solicitar permissão de câmera:', permError);
-          if (permError.name === 'NotAllowedError') {
-            setPermissionError(
-              'Permissão de câmera negada. Por favor, verifique as configurações de privacidade do navegador.'
-            );
-          } else if (permError.name === 'NotFoundError') {
-            setPermissionError('Nenhuma câmera foi encontrada. Verifique se o dispositivo possui câmera.');
-          } else {
-            setPermissionError(`Erro ao acessar câmera: ${permError.message}`);
-          }
-          return;
-        }
-
         // Inicializar o MediaPipe Pose
         console.log('Iniciando Pose...');
         let poseInstance: PoseInstance;
@@ -969,8 +1003,20 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
         // Inicializar câmera
         console.log('Iniciando câmera...');
         const CameraCtor = await loadCameraCtor();
+        const targetWidth = 640;
+        const targetHeight = 480;
+        const frameIntervalMs = 80;
         const camera = new CameraCtor(videoRef.current!, {
           onFrame: async () => {
+            if (isProcessingFrameRef.current || isCancelled) {
+              return;
+            }
+
+            const now = performance.now();
+            if (now - lastProcessedFrameAtRef.current < frameIntervalMs) {
+              return;
+            }
+
             if (videoRef.current) {
               const currentWidth = videoRef.current.videoWidth || 640;
               const currentHeight = videoRef.current.videoHeight || 480;
@@ -988,11 +1034,18 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
                 }
               }
 
-              await poseInstance.send({ image: videoRef.current });
+              isProcessingFrameRef.current = true;
+              lastProcessedFrameAtRef.current = now;
+
+              try {
+                await poseInstance.send({ image: videoRef.current });
+              } finally {
+                isProcessingFrameRef.current = false;
+              }
             }
           },
-          width: 640,
-          height: 480,
+          width: targetWidth,
+          height: targetHeight,
           facingMode: cameraFacingMode
         });
 
@@ -1021,6 +1074,15 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
 
     return () => {
       isCancelled = true;
+      isProcessingFrameRef.current = false;
+      lastProcessedFrameAtRef.current = 0;
+      lastAnalysisUpdateAtRef.current = 0;
+      lastGuidanceUpdateAtRef.current = 0;
+      lastBiotypeUpdateAtRef.current = 0;
+      lastAnalysisSignatureRef.current = '';
+      lastGuidanceSignatureRef.current = '';
+      lastBiotypeMessageRef.current = '';
+      gridCanvasRef.current = null;
       if (cameraInstanceRef.current) {
         cameraInstanceRef.current.stop();
         cameraInstanceRef.current = null;
@@ -1038,7 +1100,7 @@ export const useMediaPipe = (currentPosition: AnatomicalPosition, cameraFacingMo
     currentAnalysis,
     estimatedBiotype,
     captureGuidance,
-    currentImageBase64,
+    captureCurrentImageBase64,
     isInitialized,
     permissionError,
     videoDimensions

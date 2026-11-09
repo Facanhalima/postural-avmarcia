@@ -1,5 +1,5 @@
 import React from 'react';
-import type { SessionData } from '../types';
+import type { SessionData, AnatomicalPosition } from '../types';
 
 interface SessionProgressProps {
   sessionData: SessionData;
@@ -7,18 +7,28 @@ interface SessionProgressProps {
   currentInstruction: string;
   progressPercentage: number;
   totalSteps: number;
+  mainPositions?: AnatomicalPosition[];
 }
+
+const POSITION_LABELS: Record<AnatomicalPosition, string> = {
+  'frente': 'Vista Frontal',
+  'lado-direito': 'Perfil Direito',
+  'lado-esquerdo': 'Perfil Esquerdo',
+  'costas': 'Vista Posterior',
+  'take-pe': 'Take dos Pés'
+};
 
 export const SessionProgress: React.FC<SessionProgressProps> = ({
   sessionData,
   currentPositionLabel,
   currentInstruction,
   progressPercentage,
-  totalSteps
+  totalSteps,
+  mainPositions = ['frente', 'lado-direito', 'lado-esquerdo', 'costas']
 }) => {
-  const getStepStatus = (stepIndex: number) => {
-    if (stepIndex < sessionData.currentStep) return 'completed';
-    if (stepIndex === sessionData.currentStep && !sessionData.isComplete) return 'active';
+  const getStepStatus = (position: AnatomicalPosition) => {
+    if (sessionData.completedPositions.has(position)) return 'completed';
+    if (sessionData.currentPosition === position && !sessionData.isComplete) return 'active';
     return 'pending';
   };
 
@@ -33,8 +43,6 @@ export const SessionProgress: React.FC<SessionProgressProps> = ({
     }
   };
 
-  const stepLabels = ['Vista Frontal', 'Perfil Direito', 'Perfil Esquerdo', 'Vista Posterior', 'Take dos Pés'];
-
   return (
     <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
       {/* Barra de Progresso */}
@@ -44,7 +52,7 @@ export const SessionProgress: React.FC<SessionProgressProps> = ({
             Progresso da Avaliação
           </span>
           <span className="text-sm text-blue-600">
-            {sessionData.currentStep}/{totalSteps}
+            {sessionData.completedPositions.size}/{totalSteps}
           </span>
         </div>
         <div className="w-full bg-blue-200 rounded-full h-2">
@@ -56,7 +64,7 @@ export const SessionProgress: React.FC<SessionProgressProps> = ({
       </div>
 
       {/* Status atual */}
-      {!sessionData.isComplete && (
+      {!sessionData.isComplete && sessionData.currentPosition && (
         <div className="mb-4">
           <h3 className="font-semibold text-blue-800 mb-1">
             {currentPositionLabel}
@@ -67,13 +75,16 @@ export const SessionProgress: React.FC<SessionProgressProps> = ({
         </div>
       )}
 
-      {/* Lista de etapas */}
+      {/* Lista de etapas principais */}
       <div className="space-y-2">
-        {stepLabels.map((label, index) => {
-          const status = getStepStatus(index);
+        {mainPositions.map((position) => {
+          const status = getStepStatus(position);
+          const label = POSITION_LABELS[position];
+          const capture = sessionData.captureCache[position];
+          
           return (
             <div
-              key={index}
+              key={position}
               className={`flex items-center gap-3 p-2 rounded text-sm ${
                 status === 'completed' 
                   ? 'bg-green-100 text-green-800' 
@@ -86,14 +97,33 @@ export const SessionProgress: React.FC<SessionProgressProps> = ({
                 {getStepIcon(status)}
               </span>
               <span>{label}</span>
-              {status === 'completed' && sessionData.captures[index] && (
+              {status === 'completed' && capture && (
                 <span className="ml-auto text-xs">
-                  {sessionData.captures[index].timestamp.toLocaleTimeString()}
+                  {capture.timestamp.toLocaleTimeString()}
                 </span>
               )}
             </div>
           );
         })}
+        
+        {/* Take dos Pés - Opcional */}
+        <div
+          className={`flex items-center gap-3 p-2 rounded text-sm ${
+            sessionData.completedPositions.has('take-pe') || sessionData.footNotes
+              ? 'bg-yellow-100 text-yellow-800' 
+              : 'bg-gray-100 text-gray-600'
+          }`}
+        >
+          <span className="text-lg">
+            {sessionData.completedPositions.has('take-pe') || sessionData.footNotes ? '✓' : '○'}
+          </span>
+          <span>Take dos Pés (Opcional)</span>
+          {sessionData.footNotes && (
+            <span className="ml-auto text-xs">
+              {sessionData.footNotes ? '📝 Notas' : ''}
+            </span>
+          )}
+        </div>
       </div>
 
       {sessionData.isComplete && (
@@ -105,7 +135,7 @@ export const SessionProgress: React.FC<SessionProgressProps> = ({
             </span>
           </div>
           <p className="text-sm text-green-700 mt-1">
-            Todas as 5 posições foram capturadas. Você pode gerar o relatório final.
+            Os 4 takes principais foram capturados. Você pode gerar o relatório final.
           </p>
         </div>
       )}
